@@ -23,8 +23,23 @@ dev-setup: ## 🚀 Setup rápido para desenvolvimento
 	@$(MAKE) -f Makefile build-all
 	@echo "$(GREEN)✅ Ambiente de desenvolvimento pronto!$(NC)"
 
+dev-restart-all: ## 🔄 Reinicia tudo para desenvolvimento
+	@echo "$(BLUE)🔄 Reinicialização Completa para Desenvolvimento$(NC)"
+	@echo ""
+	@$(MAKE) -f Makefile restart-all
+	@echo ""
+	@echo "$(YELLOW)7. 🚀 Iniciando todos os serviços...$(NC)"
+	@$(MAKE) -f Makefile.dev dev-start
+	@echo ""
+	@echo "$(YELLOW)8. 🧪 Testando sistema...$(NC)"
+	@sleep 10
+	@$(MAKE) -f Makefile test-cdc-data
+	@echo ""
+	@echo "$(GREEN)🎉 Sistema completamente reiniciado e testado!$(NC)"
+
 dev-start: ## 🚀 Inicia todos os serviços em background
 	@echo "$(BLUE)🚀 Iniciando todos os serviços...$(NC)"
+	@mkdir -p logs pids
 	@nohup java -jar account-service/target/account-service-1.0-SNAPSHOT.jar > logs/account-service.log 2>&1 & echo $$! > pids/account-service.pid
 	@nohup java -jar transfer-service/target/transfer-service-1.0-SNAPSHOT.jar > logs/transfer-service.log 2>&1 & echo $$! > pids/transfer-service.pid
 	@nohup java -jar validation-service/target/validation-service-1.0-SNAPSHOT.jar > logs/validation-service.log 2>&1 & echo $$! > pids/validation-service.pid
@@ -36,13 +51,8 @@ dev-start: ## 🚀 Inicia todos os serviços em background
 
 dev-stop: ## 🛑 Para todos os serviços
 	@echo "$(BLUE)🛑 Parando serviços...$(NC)"
-	@for pid_file in pids/*.pid; do \
-		if [ -f "$$pid_file" ]; then \
-			pid=$$(cat "$$pid_file"); \
-			kill $$pid 2>/dev/null || true; \
-			rm "$$pid_file"; \
-		fi; \
-	done
+	@pkill -f ".*-service.*jar" 2>/dev/null || true
+	@rm -rf pids logs 2>/dev/null || true
 	@echo "$(GREEN)✅ Serviços parados!$(NC)"
 
 dev-restart: ## 🔄 Reinicia um serviço específico (uso: make dev-restart SERVICE=account-service)
@@ -51,11 +61,9 @@ dev-restart: ## 🔄 Reinicia um serviço específico (uso: make dev-restart SER
 		exit 1; \
 	fi
 	@echo "$(BLUE)🔄 Reiniciando $(SERVICE)...$(NC)"
-	@if [ -f "pids/$(SERVICE).pid" ]; then \
-		kill $$(cat "pids/$(SERVICE).pid") 2>/dev/null || true; \
-		rm "pids/$(SERVICE).pid"; \
-	fi
+	@pkill -f "$(SERVICE).*jar" 2>/dev/null || true
 	@$(MAKE) -f Makefile build-service SERVICE=$(SERVICE)
+	@mkdir -p logs pids
 	@nohup java -jar $(SERVICE)/target/$(SERVICE)-1.0-SNAPSHOT.jar > logs/$(SERVICE).log 2>&1 & echo $$! > pids/$(SERVICE).pid
 	@sleep 5
 	@echo "$(GREEN)✅ $(SERVICE) reiniciado!$(NC)"
@@ -122,9 +130,7 @@ dev-tail-logs: ## 📋 Acompanha logs de todos os serviços
 # 🛠️ UTILITÁRIOS DE DESENVOLVIMENTO
 # ============================================================================
 
-dev-init: ## 🏗️ Inicializa estrutura de desenvolvimento
-	@mkdir -p logs pids
-	@touch logs/account-service.log logs/transfer-service.log logs/validation-service.log logs/notification-service.log logs/audit-service.log
+
 
 dev-clean-logs: ## 🧹 Limpa logs de desenvolvimento
 	@rm -f logs/*.log

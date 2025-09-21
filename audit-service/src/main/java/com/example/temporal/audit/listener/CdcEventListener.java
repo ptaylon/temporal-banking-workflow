@@ -43,6 +43,7 @@ public class CdcEventListener {
             
             // Log da estrutura da mensagem para debug
             log.debug("Message structure - keys: {}", eventNode.fieldNames());
+            log.debug("Full message structure: {}", eventNode.toPrettyString());
             
             // Tentar diferentes estruturas de mensagem Debezium
             JsonNode payload = null;
@@ -89,12 +90,16 @@ public class CdcEventListener {
             log.debug("Processing operation: {} for table: {}", operation, table);
             
             Map<String, Object> afterState = after != null && !after.isNull() ? 
-                objectMapper.convertValue(after, Map.class) : null;
+                convertJsonNodeToMap(after) : null;
             Map<String, Object> beforeState = before != null && !before.isNull() ? 
-                objectMapper.convertValue(before, Map.class) : null;
+                convertJsonNodeToMap(before) : null;
 
             String entityId = extractEntityId(afterState, beforeState);
             String eventType = determineEventType(operation, table);
+            
+            // Log dos estados para debug
+            log.debug("Before state: {}", beforeState);
+            log.debug("After state: {}", afterState);
             
             auditService.recordEvent(
                 eventType,
@@ -143,6 +148,16 @@ public class CdcEventListener {
                 return table.toUpperCase() + "_READ"; // snapshot
             default:
                 return "UNKNOWN_OPERATION";
+        }
+    }
+
+    private Map<String, Object> convertJsonNodeToMap(JsonNode node) {
+        try {
+            return objectMapper.convertValue(node, 
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("Error converting JsonNode to Map: {}", e.getMessage());
+            return new java.util.HashMap<>();
         }
     }
 }

@@ -1,4 +1,3 @@
-### Banking Demo API Examples
 
 ### 1. Create Account - João Silva
 POST http://localhost:8081/api/accounts

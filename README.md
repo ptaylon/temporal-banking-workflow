@@ -77,9 +77,9 @@ make debug-cdc          # Debug do CDC
 make debug-temporal     # Debug do Temporal
 
 # Correções e Reset
+make restart-all        # Reinicia toda infraestrutura
 make reset-cdc          # Reset do CDC
 make reset-temporal     # Reset workflows
-make reset-audit-consumer # Reset consumer auditoria
 
 # Limpeza
 make clean              # Limpeza completa
@@ -91,6 +91,9 @@ make stop               # Para serviços
 ```bash
 # Setup de desenvolvimento
 make -f Makefile.dev dev-setup
+
+# Reinicialização completa para desenvolvimento
+make -f Makefile.dev dev-restart-all
 
 # Iniciar todos os serviços em background
 make -f Makefile.dev dev-start

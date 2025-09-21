@@ -59,13 +59,15 @@ setup-cdc: ## 🔗 Configura CDC (Debezium + PostgreSQL)
 	@docker exec banking-postgres psql -U postgres -d banking_demo -c "\
 		DO \$$\$$ \
 		BEGIN \
-			IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'dbz_publication') THEN \
-				CREATE PUBLICATION dbz_publication FOR TABLE public.accounts, public.transfers; \
+			IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'accounts') AND \
+			   EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'transfers') THEN \
+				IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'dbz_publication') THEN \
+					CREATE PUBLICATION dbz_publication FOR TABLE public.accounts, public.transfers; \
+				END IF; \
 			END IF; \
-		END \$$\$$;" || true
-	@sleep 5
-	@curl -X DELETE http://localhost:8083/connectors/banking-connector 2>/dev/null || true
-	@sleep 2
+		END \$$\$$;" > /dev/null 2>&1 || true
+	@curl -X DELETE http://localhost:8083/connectors/banking-connector > /dev/null 2>&1 || true
+	@sleep 3
 	@curl -X POST http://localhost:8083/connectors -H "Content-Type: application/json" -d '{ \
 		"name": "banking-connector", \
 		"config": { \
@@ -84,9 +86,12 @@ setup-cdc: ## 🔗 Configura CDC (Debezium + PostgreSQL)
 			"value.converter": "org.apache.kafka.connect.json.JsonConverter", \
 			"key.converter.schemas.enable": "false", \
 			"value.converter.schemas.enable": "false", \
-			"snapshot.mode": "initial" \
+			"snapshot.mode": "initial", \
+			"decimal.handling.mode": "string", \
+			"include.schema.changes": "false" \
 		} \
-	}' || echo "$(YELLOW)⚠️  Erro ao registrar conector - tente novamente$(NC)"
+	}' > /dev/null 2>&1
+	@echo "$(GREEN)✅ CDC configurado$(NC)"
 
 check-infra: ## 🔍 Verifica se a infraestrutura está funcionando
 	@echo "$(BLUE)🔍 Verificando infraestrutura...$(NC)"
@@ -144,6 +149,20 @@ test-transfer: ## 🧪 Testa transferência completa
 	@echo "$(BLUE)🧪 Testando transferência...$(NC)"
 	@./scripts/test-transfer.sh
 
+test-cdc-data: ## 🧪 Testa dados específicos do CDC
+	@echo "$(BLUE)🧪 Testando dados CDC...$(NC)"
+	@echo "1. Criando conta com balance específico..."
+	@curl -s -X POST http://localhost:8081/api/accounts -H "Content-Type: application/json" -d '{"accountNumber": "CDC999", "ownerName": "CDC Test", "balance": 123.45, "currency": "BRL"}' | jq .
+	@echo "2. Aguardando CDC (5s)..."
+	@sleep 5
+	@echo "3. Verificando auditoria..."
+	@curl -s http://localhost:8085/api/audit/accounts/CDC999 | jq .
+	@echo "4. Atualizando balance..."
+	@curl -s -X PUT http://localhost:8081/api/accounts/CDC999 -H "Content-Type: application/json" -d '{"balance": 456.78}' | jq . || echo "$(YELLOW)⚠️  Endpoint de update pode não existir$(NC)"
+	@sleep 5
+	@echo "5. Verificando auditoria após update..."
+	@curl -s http://localhost:8085/api/audit/accounts/CDC999 | jq .
+
 
 
 # ============================================================================
@@ -193,6 +212,11 @@ debug-cdc: ## 🔍 Debug específico do CDC
 	@echo "$(YELLOW)3. Consumer Groups:$(NC)"
 	@docker exec banking-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list 2>/dev/null | grep audit || echo "$(YELLOW)⚠️  Nenhum consumer group audit$(NC)"
 
+debug-kafka-live: ## 🔍 Monitora mensagens Kafka em tempo real
+	@echo "$(BLUE)🔍 Monitorando mensagens Kafka (Ctrl+C para parar)...$(NC)"
+	@echo "$(YELLOW)Tópico: banking.public.accounts$(NC)"
+	@docker exec banking-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic banking.public.accounts --from-beginning
+
 debug-temporal: ## 🔍 Debug específico do Temporal
 	@echo "$(BLUE)🔍 Debug Temporal Detalhado$(NC)"
 	@echo ""
@@ -214,11 +238,20 @@ fix-audit-db: ## 🛠️ Recria tabela de auditoria (deixa Hibernate criar)
 
 reset-cdc: ## 🔄 Reset completo do CDC
 	@echo "$(BLUE)🔄 Resetando CDC...$(NC)"
+	@echo "1. Removendo conector existente..."
 	@curl -X DELETE http://localhost:8083/connectors/banking-connector 2>/dev/null || true
+	@echo "2. Resetando consumer groups..."
 	@docker exec banking-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --group audit-service --reset-offsets --to-earliest --topic banking.public.accounts --execute 2>/dev/null || true
 	@docker exec banking-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --group audit-service --reset-offsets --to-earliest --topic banking.public.transfers --execute 2>/dev/null || true
+	@echo "3. Removendo tópicos antigos..."
+	@docker exec banking-kafka kafka-topics --bootstrap-server localhost:9092 --delete --topic banking.public.accounts 2>/dev/null || true
+	@docker exec banking-kafka kafka-topics --bootstrap-server localhost:9092 --delete --topic banking.public.transfers 2>/dev/null || true
+	@sleep 5
+	@echo "4. Recriando conector com configurações corrigidas..."
 	@$(MAKE) setup-cdc
-	@echo "$(GREEN)✅ CDC resetado!$(NC)"
+	@echo "$(GREEN)✅ CDC resetado com correções!$(NC)"
+
+
 
 reset-temporal: ## 🔄 Reset workflows Temporal
 	@echo "$(BLUE)🔄 Resetando workflows Temporal...$(NC)"
@@ -239,9 +272,28 @@ clean: ## 🧹 Limpeza completa (para containers e build)
 	@docker system prune -f
 	@echo "$(GREEN)✅ Limpeza concluída!$(NC)"
 
+restart-all: ## 🔄 Reinicia toda a infraestrutura do zero
+	@echo "$(BLUE)🔄 Reiniciando tudo...$(NC)"
+	@pkill -f ".*-service.*jar" 2>/dev/null || true
+	@docker-compose -f $(DOCKER_COMPOSE_FILE) down --remove-orphans -v || true
+	@docker ps -aq --filter name=banking | xargs -r docker rm -f || true
+	@docker volume ls -q | grep -E "(banking|temporal-banking)" | xargs -r docker volume rm || true
+	@docker network ls -q --filter name=banking-network | xargs -r docker network rm || true
+	@$(MAKE) setup-infra
+	@echo "$(YELLOW)Aguardando PostgreSQL inicializar (60s)...$(NC)"
+	@sleep 60
+	@$(MAKE) build-all
+	@echo "$(YELLOW)Iniciando account-service para criar tabelas...$(NC)"
+	@nohup java -jar account-service/target/account-service-1.0-SNAPSHOT.jar > /tmp/account-service.log 2>&1 & echo $$! > /tmp/account-service.pid
+	@sleep 15
+	@$(MAKE) setup-cdc
+	@kill $$(cat /tmp/account-service.pid) 2>/dev/null || true
+	@rm -f /tmp/account-service.pid /tmp/account-service.log
+	@echo "$(GREEN)✅ Pronto! Execute: make -f Makefile.dev dev-start$(NC)"
+
 stop: ## 🛑 Para todos os serviços Docker
 	@echo "$(BLUE)🛑 Parando serviços...$(NC)"
-	@docker-compose -f $(DOCKER_COMPOSE_FILE) down
+	@docker-compose -f $(DOCKER_COMPOSE_FILE) down --remove-orphans || true
 	@pkill -f ".*-service.*jar" 2>/dev/null || true
 	@echo "$(GREEN)✅ Serviços parados!$(NC)"
 
@@ -249,6 +301,29 @@ stop-services: ## 🛑 Para apenas os microserviços Java
 	@echo "$(BLUE)🛑 Parando microserviços Java...$(NC)"
 	@pkill -f ".*-service.*jar" 2>/dev/null || true
 	@echo "$(GREEN)✅ Microserviços parados!$(NC)"
+
+force-clean: ## 🧨 Limpeza forçada de tudo (use com cuidado)
+	@echo "$(RED)🧨 === LIMPEZA FORÇADA === $(NC)"
+	@echo "$(YELLOW)⚠️  Isso vai remover TODOS os containers e volumes banking!$(NC)"
+	@read -p "Tem certeza? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo ""
+	@echo "$(YELLOW)1. Parando todos os processos Java...$(NC)"
+	@pkill -f ".*-service.*jar" 2>/dev/null || true
+	@echo ""
+	@echo "$(YELLOW)2. Removendo containers banking...$(NC)"
+	@docker ps -aq --filter name=banking | xargs -r docker rm -f || true
+	@echo ""
+	@echo "$(YELLOW)3. Removendo volumes...$(NC)"
+	@docker volume ls -q | grep -E "(banking|temporal-banking)" | xargs -r docker volume rm || true
+	@echo ""
+	@echo "$(YELLOW)4. Removendo redes...$(NC)"
+	@docker network ls -q --filter name=banking | xargs -r docker network rm || true
+	@echo ""
+	@echo "$(YELLOW)5. Limpeza geral do Docker...$(NC)"
+	@docker system prune -f
+	@echo ""
+	@echo "$(GREEN)✅ Limpeza forçada concluída!$(NC)"
+	@echo "$(BLUE)💡 Agora execute: make restart-all$(NC)"
 
 # ============================================================================
 # 🌐 URLS ÚTEIS
@@ -266,3 +341,18 @@ urls: ## 🌐 Mostra URLs úteis do sistema
 	@echo "  • Validation Service:   http://localhost:8087"
 	@echo "  • Notification Service: http://localhost:8086"
 	@echo "  • Audit Service:        http://localhost:8085"
+
+check-orphans: ## 🔍 Verifica containers e volumes órfãos
+	@echo "$(BLUE)🔍 Verificando containers e volumes órfãos...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Containers banking:$(NC)"
+	@docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" | grep banking || echo "  Nenhum container banking encontrado"
+	@echo ""
+	@echo "$(YELLOW)Volumes banking:$(NC)"
+	@docker volume ls | grep -E "(banking|temporal-banking)" || echo "  Nenhum volume banking encontrado"
+	@echo ""
+	@echo "$(YELLOW)Redes banking:$(NC)"
+	@docker network ls | grep banking || echo "  Nenhuma rede banking encontrada"
+	@echo ""
+	@echo "$(YELLOW)Processos Java:$(NC)"
+	@ps aux | grep ".*-service.*jar" | grep -v grep || echo "  Nenhum processo Java encontrado"
