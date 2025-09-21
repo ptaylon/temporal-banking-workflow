@@ -1,0 +1,161 @@
+# Banking Demo - Makefile para Desenvolvimento
+# Comandos específicos para desenvolvimento e debug
+
+.PHONY: dev-setup dev-start dev-test dev-debug
+
+# Cores
+GREEN := \033[0;32m
+YELLOW := \033[1;33m
+BLUE := \033[0;34m
+RED := \033[0;31m
+NC := \033[0m
+
+# ============================================================================
+# 🚀 DESENVOLVIMENTO RÁPIDO
+# ============================================================================
+
+dev-setup: ## 🚀 Setup rápido para desenvolvimento
+	@echo "$(BLUE)🚀 Setup de desenvolvimento...$(NC)"
+	@$(MAKE) -f Makefile setup-infra
+	@echo "$(YELLOW)⏳ Aguardando infraestrutura (30s)...$(NC)"
+	@sleep 30
+	@$(MAKE) -f Makefile setup-cdc
+	@$(MAKE) -f Makefile build-all
+	@echo "$(GREEN)✅ Ambiente de desenvolvimento pronto!$(NC)"
+
+dev-start: ## 🚀 Inicia todos os serviços em background
+	@echo "$(BLUE)🚀 Iniciando todos os serviços...$(NC)"
+	@nohup java -jar account-service/target/account-service-1.0-SNAPSHOT.jar > logs/account-service.log 2>&1 & echo $$! > pids/account-service.pid
+	@nohup java -jar transfer-service/target/transfer-service-1.0-SNAPSHOT.jar > logs/transfer-service.log 2>&1 & echo $$! > pids/transfer-service.pid
+	@nohup java -jar validation-service/target/validation-service-1.0-SNAPSHOT.jar > logs/validation-service.log 2>&1 & echo $$! > pids/validation-service.pid
+	@nohup java -jar notification-service/target/notification-service-1.0-SNAPSHOT.jar > logs/notification-service.log 2>&1 & echo $$! > pids/notification-service.pid
+	@nohup java -jar audit-service/target/audit-service-1.0-SNAPSHOT.jar > logs/audit-service.log 2>&1 & echo $$! > pids/audit-service.pid
+	@sleep 10
+	@$(MAKE) -f Makefile debug-services
+	@echo "$(GREEN)✅ Todos os serviços iniciados!$(NC)"
+
+dev-stop: ## 🛑 Para todos os serviços
+	@echo "$(BLUE)🛑 Parando serviços...$(NC)"
+	@for pid_file in pids/*.pid; do \
+		if [ -f "$$pid_file" ]; then \
+			pid=$$(cat "$$pid_file"); \
+			kill $$pid 2>/dev/null || true; \
+			rm "$$pid_file"; \
+		fi; \
+	done
+	@echo "$(GREEN)✅ Serviços parados!$(NC)"
+
+dev-restart: ## 🔄 Reinicia um serviço específico (uso: make dev-restart SERVICE=account-service)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)❌ Especifique o serviço: make dev-restart SERVICE=account-service$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)🔄 Reiniciando $(SERVICE)...$(NC)"
+	@if [ -f "pids/$(SERVICE).pid" ]; then \
+		kill $$(cat "pids/$(SERVICE).pid") 2>/dev/null || true; \
+		rm "pids/$(SERVICE).pid"; \
+	fi
+	@$(MAKE) -f Makefile build-service SERVICE=$(SERVICE)
+	@nohup java -jar $(SERVICE)/target/$(SERVICE)-1.0-SNAPSHOT.jar > logs/$(SERVICE).log 2>&1 & echo $$! > pids/$(SERVICE).pid
+	@sleep 5
+	@echo "$(GREEN)✅ $(SERVICE) reiniciado!$(NC)"
+
+dev-logs: ## 📋 Mostra logs de um serviço (uso: make dev-logs SERVICE=account-service)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)❌ Especifique o serviço: make dev-logs SERVICE=account-service$(NC)"; \
+		exit 1; \
+	fi
+	@tail -f logs/$(SERVICE).log
+
+dev-logs-all: ## 📋 Mostra logs de todos os serviços
+	@tail -f logs/*.log
+
+# ============================================================================
+# 🧪 TESTES DE DESENVOLVIMENTO
+# ============================================================================
+
+dev-test-flow: ## 🧪 Teste completo do fluxo
+	@echo "$(BLUE)🧪 Testando fluxo completo...$(NC)"
+	@echo "1. Criando contas..."
+	@curl -s -X POST http://localhost:8081/api/accounts -H "Content-Type: application/json" -d '{"accountNumber": "DEV001", "ownerName": "Dev User 1", "balance": 1000.00, "currency": "BRL"}' | jq .
+	@curl -s -X POST http://localhost:8081/api/accounts -H "Content-Type: application/json" -d '{"accountNumber": "DEV002", "ownerName": "Dev User 2", "balance": 500.00, "currency": "BRL"}' | jq .
+	@echo "2. Aguardando CDC (5s)..."
+	@sleep 5
+	@echo "3. Verificando auditoria..."
+	@curl -s http://localhost:8085/api/audit/accounts/DEV001 | jq .
+	@echo "4. Executando transferência..."
+	@curl -s -X POST http://localhost:8082/api/transfers -H "Content-Type: application/json" -d '{"sourceAccountNumber": "DEV001", "destinationAccountNumber": "DEV002", "amount": 100.00, "currency": "BRL"}' | jq .
+	@echo "$(GREEN)✅ Teste de fluxo concluído!$(NC)"
+
+dev-test-cdc-only: ## 🧪 Teste apenas do CDC
+	@echo "$(BLUE)🧪 Testando apenas CDC...$(NC)"
+	@curl -s -X POST http://localhost:8081/api/accounts -H "Content-Type: application/json" -d '{"accountNumber": "CDC001", "ownerName": "CDC Test", "balance": 999.99, "currency": "BRL"}' | jq .
+	@echo "Aguardando CDC (10s)..."
+	@sleep 10
+	@curl -s http://localhost:8085/api/audit/accounts/CDC001 | jq .
+
+dev-test-temporal: ## 🧪 Teste apenas do Temporal
+	@echo "$(BLUE)🧪 Testando Temporal...$(NC)"
+	@curl -s -X POST http://localhost:8082/api/transfers -H "Content-Type: application/json" -d '{"sourceAccountNumber": "DEV001", "destinationAccountNumber": "DEV002", "amount": 1.00, "currency": "BRL"}' | jq .
+
+# ============================================================================
+# 🔍 DEBUG ESSENCIAL
+# ============================================================================
+
+dev-debug-kafka: ## 🔍 Mostra mensagens Kafka em tempo real
+	@echo "$(BLUE)🔍 Mensagens Kafka (Ctrl+C para parar)...$(NC)"
+	@docker exec banking-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic banking.public.accounts --from-beginning
+
+dev-debug-db: ## 🔍 Consulta dados dos bancos
+	@echo "$(BLUE)🔍 Dados dos bancos...$(NC)"
+	@echo "$(YELLOW)Contas (últimas 5):$(NC)"
+	@docker exec banking-postgres psql -U postgres -d banking_demo -c "SELECT account_number, owner_name, balance FROM accounts ORDER BY id DESC LIMIT 5;" 2>/dev/null || echo "$(RED)❌ Erro ao consultar contas$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Auditoria (últimas 5):$(NC)"
+	@docker exec banking-audit-postgres psql -U postgres -d audit_db -c "SELECT event_type, entity_id, timestamp FROM audit_events ORDER BY timestamp DESC LIMIT 5;" 2>/dev/null || echo "$(RED)❌ Erro ao consultar auditoria$(NC)"
+
+dev-tail-logs: ## 📋 Acompanha logs de todos os serviços
+	@echo "$(BLUE)📋 Logs em tempo real (Ctrl+C para parar)...$(NC)"
+	@tail -f logs/*.log 2>/dev/null || echo "$(YELLOW)⚠️  Nenhum log encontrado. Execute 'make -f Makefile.dev dev-start' primeiro$(NC)"
+
+# ============================================================================
+# 🛠️ UTILITÁRIOS DE DESENVOLVIMENTO
+# ============================================================================
+
+dev-init: ## 🏗️ Inicializa estrutura de desenvolvimento
+	@mkdir -p logs pids
+	@touch logs/account-service.log logs/transfer-service.log logs/validation-service.log logs/notification-service.log logs/audit-service.log
+
+dev-clean-logs: ## 🧹 Limpa logs de desenvolvimento
+	@rm -f logs/*.log
+	@echo "$(GREEN)✅ Logs limpos!$(NC)"
+
+dev-check-errors: ## 🚨 Procura erros nos logs
+	@echo "$(BLUE)🚨 Procurando erros nos logs...$(NC)"
+	@if [ -d "logs" ]; then \
+		echo "$(YELLOW)Erros encontrados:$(NC)"; \
+		grep -i "error\|exception\|failed" logs/*.log 2>/dev/null | tail -10 | sed 's/^/  /' || echo "$(GREEN)✅ Nenhum erro encontrado!$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  Pasta logs não encontrada$(NC)"; \
+	fi
+
+dev-health-check: ## 🏥 Verifica saúde completa do sistema
+	@echo "$(BLUE)🏥 Verificação de Saúde Completa$(NC)"
+	@echo ""
+	@echo "$(YELLOW)1. Infraestrutura:$(NC)"
+	@$(MAKE) -f Makefile check-infra 2>/dev/null || echo "$(RED)❌ Problemas na infraestrutura$(NC)"
+	@echo ""
+	@echo "$(YELLOW)2. Microserviços:$(NC)"
+	@$(MAKE) -f Makefile debug-services 2>/dev/null
+	@echo ""
+	@echo "$(YELLOW)3. CDC:$(NC)"
+	@curl -s http://localhost:8083/connectors/banking-connector/status 2>/dev/null | jq -r '"Status: " + .connector.state' || echo "$(RED)❌ CDC não configurado$(NC)"
+	@echo ""
+	@echo "$(YELLOW)4. Últimos erros:$(NC)"
+	@$(MAKE) -f Makefile.dev dev-check-errors 2>/dev/null
+
+dev-reset-data: ## 🗑️ Limpa dados de teste dos bancos
+	@echo "$(BLUE)🗑️  Limpando dados de teste...$(NC)"
+	@docker exec banking-postgres psql -U postgres -d banking_demo -c "DELETE FROM accounts WHERE account_number LIKE 'TEST%' OR account_number LIKE 'DEV%' OR account_number LIKE 'CDC%';" 2>/dev/null || true
+	@docker exec banking-audit-postgres psql -U postgres -d audit_db -c "DELETE FROM audit_events WHERE entity_id LIKE 'TEST%' OR entity_id LIKE 'DEV%' OR entity_id LIKE 'CDC%';" 2>/dev/null || true
+	@echo "$(GREEN)✅ Dados de teste removidos!$(NC)"

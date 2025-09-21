@@ -15,21 +15,14 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
     show-sql: true
-
-debezium:
-  source:
-    connector.class: io.debezium.connector.postgresql.PostgresConnector
-    database.hostname: localhost
-    database.port: 5432
-    database.user: postgres
-    database.password: postgres
-    database.dbname: banking_demo
-    database.server.name: banking-db
-    schema.include.list: public
-    table.include.list: public.accounts,public.transfers
-    plugin.name: pgoutput
-    publication.name: dbz_publication
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: audit-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
 
 management:
   endpoints:
@@ -39,3 +32,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    com.example.temporal.audit: DEBUG
+    org.springframework.kafka: INFO

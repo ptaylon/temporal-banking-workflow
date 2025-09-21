@@ -30,7 +30,12 @@ public class TemporalConfig {
 
     @Bean
     public Worker worker(WorkerFactory factory, MoneyTransferActivitiesImpl activities) {
-        Worker worker = factory.newWorker(MoneyTransferWorkflow.QUEUE_NAME);
+        Worker worker = factory.newWorker(MoneyTransferWorkflow.QUEUE_NAME,
+                io.temporal.worker.WorkerOptions.newBuilder()
+                        .setMaxConcurrentWorkflowTaskExecutions(1)
+                        .setMaxConcurrentActivityExecutions(10)
+                        .setWorkflowTaskTimeout(java.time.Duration.ofMinutes(1))
+                        .build());
         worker.registerWorkflowImplementationTypes(MoneyTransferWorkflowImpl.class);
         worker.registerActivitiesImplementations(activities);
         factory.start();

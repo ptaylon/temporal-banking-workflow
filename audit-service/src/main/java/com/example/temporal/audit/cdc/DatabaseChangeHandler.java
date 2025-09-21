@@ -35,9 +35,9 @@ public class DatabaseChangeHandler implements DebeziumEngine.ChangeConsumer<Reco
                 Struct before = sourceRecordValue.getStruct("before");
 
                 Map<String, Object> afterState = after != null ? 
-                    objectMapper.convertValue(after, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}) : null;
+                    convertStructToMap(after) : null;
                 Map<String, Object> beforeState = before != null ? 
-                    objectMapper.convertValue(before, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}) : null;
+                    convertStructToMap(before) : null;
 
                 String entityId = extractEntityId(afterState, beforeState);
                 String eventType = determineEventType(operation, table);
@@ -76,5 +76,14 @@ public class DatabaseChangeHandler implements DebeziumEngine.ChangeConsumer<Reco
             default:
                 return "UNKNOWN_OPERATION";
         }
+    }
+
+    private Map<String, Object> convertStructToMap(Struct struct) {
+        Map<String, Object> map = new java.util.HashMap<>();
+        struct.schema().fields().forEach(field -> {
+            Object value = struct.get(field);
+            map.put(field.name(), value);
+        });
+        return map;
     }
 }

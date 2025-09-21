@@ -1,5 +1,5 @@
 server:
-  port: ${VALIDATION_SERVER_PORT:8087}
+  port: 8087
 
 spring:
   application:

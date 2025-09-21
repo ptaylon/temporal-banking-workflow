@@ -1,20 +1,60 @@
-###
+### Banking Demo API Examples
 
-# curl -X POST http://localhost:8082/api/transfers -H "Content-Type: application/json" -d '{
-#  "sourceAccountNumber": "123",
-#  "destinationAccountNumber": "456",
-#  "amount": 2.00,
-#  "currency": "USD"
-#}'
+### 1. Create Account - João Silva
+POST http://localhost:8081/api/accounts
+Content-Type: application/json
+
+{
+  "accountNumber": "123456",
+  "ownerName": "João Silva",
+  "balance": 1000.00,
+  "currency": "BRL"
+}
+
+### 2. Create Account - Maria Santos
+POST http://localhost:8081/api/accounts
+Content-Type: application/json
+
+{
+  "accountNumber": "789012",
+  "ownerName": "Maria Santos",
+  "balance": 500.00,
+  "currency": "BRL"
+}
+
+### 3. Get Account by Number
+GET http://localhost:8081/api/accounts/123456
+
+### 4. Transfer Money
 POST http://localhost:8082/api/transfers
 Content-Type: application/json
 
 {
-  "sourceAccountNumber": "123",
-  "destinationAccountNumber": "456",
-  "amount": 2.00,
-  "currency": "USD"
+  "sourceAccountNumber": "123456",
+  "destinationAccountNumber": "789012",
+  "amount": 5.00,
+  "currency": "BRL"
 }
+
+### 5. Get Transfer Status (replace {workflowId} with actual ID from transfer response)
+GET http://localhost:8082/api/transfers/{workflowId}
+
+### 6. Get Audit Trail for Account
+GET http://localhost:8085/api/audit/accounts/123456
+
+### 7. Search Audit Events
+GET http://localhost:8085/api/audit/search?entityType=accounts&eventTypes=ACCOUNTS_CREATED,ACCOUNTS_UPDATED&start=2024-01-01T00:00:00&end=2024-12-31T23:59:59
+
+### 8. Health Checks
+GET http://localhost:8081/actuator/health
+###
+GET http://localhost:8082/actuator/health
+###
+GET http://localhost:8085/actuator/health
+###
+GET http://localhost:8086/actuator/health
+###
+GET http://localhost:8087/actuator/health
 
 ###
 

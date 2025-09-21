@@ -63,7 +63,13 @@ Thumbs.db
 
 # Application specific
 offsets.dat
+audit-offsets.dat
 *.pid
+
+# Development files
+logs/
+pids/
+backups/
 
 # Docker
 .docker/
