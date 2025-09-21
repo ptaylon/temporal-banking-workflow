@@ -1,0 +1,41 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: audit-service
+  datasource:
+    url: jdbc:postgresql://localhost:5433/audit_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+debezium:
+  source:
+    connector.class: io.debezium.connector.postgresql.PostgresConnector
+    database.hostname: localhost
+    database.port: 5432
+    database.user: postgres
+    database.password: postgres
+    database.dbname: banking_demo
+    database.server.name: banking-db
+    schema.include.list: public
+    table.include.list: public.accounts,public.transfers
+    plugin.name: pgoutput
+    publication.name: dbz_publication
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

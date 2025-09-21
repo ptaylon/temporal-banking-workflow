@@ -1,0 +1,31 @@
+server:
+  port: ${VALIDATION_SERVER_PORT:8087}
+
+spring:
+  application:
+    name: validation-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/banking_demo
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+service:
+  account:
+    url: http://localhost:8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

@@ -1,0 +1,20 @@
+###
+
+# curl -X POST http://localhost:8082/api/transfers -H "Content-Type: application/json" -d '{
+#  "sourceAccountNumber": "123",
+#  "destinationAccountNumber": "456",
+#  "amount": 2.00,
+#  "currency": "USD"
+#}'
+POST http://localhost:8082/api/transfers
+Content-Type: application/json
+
+{
+  "sourceAccountNumber": "123",
+  "destinationAccountNumber": "456",
+  "amount": 2.00,
+  "currency": "USD"
+}
+
+###
+
