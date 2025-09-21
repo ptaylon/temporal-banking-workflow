@@ -21,4 +21,7 @@ public class TransferRequest {
 
     @NotBlank(message = "Currency is required")
     private String currency;
+
+    // ID da transferência (opcional - usado internamente)
+    private Long transferId;
 }

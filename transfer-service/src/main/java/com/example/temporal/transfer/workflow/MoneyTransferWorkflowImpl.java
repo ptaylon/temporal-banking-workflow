@@ -61,6 +61,9 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
     @Override
     public TransferResponse executeTransfer(TransferRequest transferRequest) {
+        // Usar o ID do request ou gerar um aleatório se não fornecido
+        Long transferId = transferRequest.getTransferId() != null ? 
+            transferRequest.getTransferId() : new Random().nextLong();
         // Create Saga for compensation
         Saga saga = new Saga(
                 new Saga.Options.Builder()
@@ -69,7 +72,7 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         );
         
         currentResponse = new TransferResponse()
-                .setTransferId(new Random().nextLong())
+                .setTransferId(transferId)
                 .setSourceAccountNumber(transferRequest.getSourceAccountNumber())
                 .setDestinationAccountNumber(transferRequest.getDestinationAccountNumber())
                 .setAmount(transferRequest.getAmount())
@@ -79,14 +82,17 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         try {
             // Set initial status
             currentResponse.setStatus(TransferStatus.INITIATED);
+            accountActivities.updateTransferStatus(transferId, TransferStatus.INITIATED.name());
             notificationActivities.notifyTransferInitiated(currentResponse.getTransferId());
 
             // Validate transfer with dedicated retry policy
             try {
                 validationActivities.validateTransfer(transferRequest);
                 currentResponse.setStatus(TransferStatus.VALIDATED);
+                accountActivities.updateTransferStatus(transferId, TransferStatus.VALIDATED.name());
             } catch (ActivityFailure e) {
                 currentResponse.setStatus(TransferStatus.FAILED);
+                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), e.getMessage());
                 notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
                 throw e;
             }
@@ -122,11 +128,13 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
             } catch (ActivityFailure e) {
                 currentResponse.setStatus(TransferStatus.COMPENSATING);
                 currentResponse.setFailureReason(e.getMessage());
+                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATING.name(), e.getMessage());
                 
                 // Compensate all activities in reverse order
                 saga.compensate();
                 
                 currentResponse.setStatus(TransferStatus.COMPENSATED);
+                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATED.name(), e.getMessage());
                 notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
                 
                 throw e;
@@ -134,12 +142,14 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
             // Complete the transfer with notifications
             currentResponse.setStatus(TransferStatus.COMPLETED);
+            accountActivities.updateTransferStatus(transferId, TransferStatus.COMPLETED.name());
             notificationActivities.notifyTransferCompleted(currentResponse.getTransferId());
         } catch (ActivityFailure e) {
             // If we haven't handled the error already, do so now
             if (currentResponse.getStatus() != TransferStatus.FAILED && 
                 currentResponse.getStatus() != TransferStatus.COMPENSATED) {
                 currentResponse.setStatus(TransferStatus.FAILED);
+                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), e.getMessage());
                 notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
             }
             throw e;

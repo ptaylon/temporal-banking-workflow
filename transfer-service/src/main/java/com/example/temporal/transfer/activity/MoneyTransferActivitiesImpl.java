@@ -1,9 +1,11 @@
 package com.example.temporal.transfer.activity;
 
 import com.example.temporal.common.dto.TransferRequest;
+import com.example.temporal.common.model.TransferStatus;
 import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.transfer.client.AccountServiceClient;
 import com.example.temporal.transfer.client.ValidationServiceClient;
+import com.example.temporal.transfer.service.TransferPersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -20,6 +22,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     private final AccountServiceClient accountServiceClient;
     private final ValidationServiceClient validationServiceClient;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final TransferPersistenceService transferPersistenceService;
 
     private static final String TRANSFER_EVENTS_TOPIC = "transfer-events";
 
@@ -85,5 +88,29 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
         log.info("Notifying transfer failed: {} reason: {}", transferId, reason);
         kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
             String.format("TRANSFER_FAILED:%d:%s", transferId, reason));
+    }
+
+    @Override
+    public void updateTransferStatus(final Long transferId, final String status) {
+        log.info("Updating transfer {} status to {}", transferId, status);
+        try {
+            TransferStatus transferStatus = TransferStatus.valueOf(status);
+            transferPersistenceService.updateTransferStatus(transferId, transferStatus);
+        } catch (Exception e) {
+            log.error("Error updating transfer status: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to update transfer status", e);
+        }
+    }
+
+    @Override
+    public void updateTransferStatusWithReason(final Long transferId, final String status, final String reason) {
+        log.info("Updating transfer {} status to {} with reason: {}", transferId, status, reason);
+        try {
+            TransferStatus transferStatus = TransferStatus.valueOf(status);
+            transferPersistenceService.updateTransferStatus(transferId, transferStatus, reason);
+        } catch (Exception e) {
+            log.error("Error updating transfer status with reason: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to update transfer status", e);
+        }
     }
 }

@@ -84,6 +84,16 @@ public class MoneyTransferWorkflowTest {
         public void notifyTransferFailed(Long transferId, String reason) {
             delegate.notifyTransferFailed(transferId, reason);
         }
+        
+        @Override
+        public void updateTransferStatus(Long transferId, String status) {
+            delegate.updateTransferStatus(transferId, status);
+        }
+        
+        @Override
+        public void updateTransferStatusWithReason(Long transferId, String status, String reason) {
+            delegate.updateTransferStatusWithReason(transferId, status, reason);
+        }
     }
 
 @Test

@@ -23,4 +23,14 @@ public class TransferController {
     public ResponseEntity<TransferResponse> getTransferStatus(@PathVariable String workflowId) {
         return ResponseEntity.ok(transferService.getTransferStatus(workflowId));
     }
+
+    @GetMapping("/account/{accountNumber}")
+    public ResponseEntity<?> getTransfersByAccount(@PathVariable String accountNumber) {
+        return ResponseEntity.ok(transferService.getTransfersByAccount(accountNumber));
+    }
+
+    @GetMapping("/transfer/{transferId}")
+    public ResponseEntity<?> getTransferById(@PathVariable Long transferId) {
+        return ResponseEntity.ok(transferService.getTransferById(transferId));
+    }
 }

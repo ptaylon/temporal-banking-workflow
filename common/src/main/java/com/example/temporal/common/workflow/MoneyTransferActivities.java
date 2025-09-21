@@ -39,4 +39,10 @@ public interface MoneyTransferActivities {
     @ActivityMethod
     void notifyTransferFailed(final Long transferId, final String reason);
 
+    @ActivityMethod
+    void updateTransferStatus(final Long transferId, final String status);
+
+    @ActivityMethod
+    void updateTransferStatusWithReason(final Long transferId, final String status, final String reason);
+
 }
