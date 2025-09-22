@@ -61,7 +61,11 @@ public class TransferPersistenceService {
         if (transferOpt.isPresent()) {
             Transfer transfer = transferOpt.get();
             transfer.setStatus(status);
-            transfer.setFailureReason(failureReason);
+            // Truncate failure reason to fit database column limit (255 characters)
+            String truncatedReason = failureReason != null && failureReason.length() > 255 
+                ? failureReason.substring(0, 252) + "..." 
+                : failureReason;
+            transfer.setFailureReason(truncatedReason);
             Transfer updatedTransfer = transferRepository.save(transfer);
             log.info("Transfer {} status updated to {} with reason", transferId, status);
             return updatedTransfer;

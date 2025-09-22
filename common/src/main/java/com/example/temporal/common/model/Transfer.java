@@ -32,6 +32,7 @@ public class Transfer {
     @Column(nullable = false)
     private TransferStatus status;
 
+    @Column(length = 255)
     private String failureReason;
 
     @Column(nullable = false)

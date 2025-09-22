@@ -20,23 +20,23 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
     private TransferResponse currentResponse;
 
     private final ActivityOptions validationActivityOptions = ActivityOptions.newBuilder()
-            .setStartToCloseTimeout(Duration.ofSeconds(10))
+            .setStartToCloseTimeout(Duration.ofSeconds(30))
             .setRetryOptions(RetryOptions.newBuilder()
-                    .setInitialInterval(Duration.ofSeconds(1))
-                    .setMaximumInterval(Duration.ofSeconds(10))
+                    .setInitialInterval(Duration.ofSeconds(2))
+                    .setMaximumInterval(Duration.ofMinutes(5)) // Até 5 minutos entre tentativas
                     .setBackoffCoefficient(2.0)
-                    .setMaximumAttempts(3)
-                    .setDoNotRetry(ValidationException.class.getName())
+                    .setMaximumAttempts(20) // Muito mais tentativas para conectividade
+                    .setDoNotRetry(ValidationException.class.getName()) // Apenas erros de negócio não devem ser retentados
                     .build())
             .build();
 
     private final ActivityOptions accountActivityOptions = ActivityOptions.newBuilder()
-            .setStartToCloseTimeout(Duration.ofSeconds(5))
+            .setStartToCloseTimeout(Duration.ofSeconds(30))
             .setRetryOptions(RetryOptions.newBuilder()
-                    .setInitialInterval(Duration.ofMillis(500))
-                    .setMaximumInterval(Duration.ofSeconds(5))
+                    .setInitialInterval(Duration.ofSeconds(1))
+                    .setMaximumInterval(Duration.ofMinutes(2))
                     .setBackoffCoefficient(2.0)
-                    .setMaximumAttempts(5)
+                    .setMaximumAttempts(15) // Mais tentativas para operações bancárias críticas
                     .build())
             .build();
 
@@ -50,6 +50,16 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
                     .build())
             .build();
 
+    private final ActivityOptions persistenceActivityOptions = ActivityOptions.newBuilder()
+            .setStartToCloseTimeout(Duration.ofSeconds(10))
+            .setRetryOptions(RetryOptions.newBuilder()
+                    .setInitialInterval(Duration.ofSeconds(1))
+                    .setMaximumInterval(Duration.ofSeconds(10))
+                    .setBackoffCoefficient(2.0)
+                    .setMaximumAttempts(15) // Mais tentativas para operações de persistência
+                    .build())
+            .build();
+
     private final MoneyTransferActivities validationActivities =
             Workflow.newActivityStub(MoneyTransferActivities.class, validationActivityOptions);
 
@@ -58,6 +68,9 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
     private final MoneyTransferActivities notificationActivities =
             Workflow.newActivityStub(MoneyTransferActivities.class, notificationActivityOptions);
+
+    private final MoneyTransferActivities persistenceActivities =
+            Workflow.newActivityStub(MoneyTransferActivities.class, persistenceActivityOptions);
 
     @Override
     public TransferResponse executeTransfer(TransferRequest transferRequest) {
@@ -82,18 +95,30 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         try {
             // Set initial status
             currentResponse.setStatus(TransferStatus.INITIATED);
-            accountActivities.updateTransferStatus(transferId, TransferStatus.INITIATED.name());
+            persistenceActivities.updateTransferStatus(transferId, TransferStatus.INITIATED.name());
             notificationActivities.notifyTransferInitiated(currentResponse.getTransferId());
 
-            // Validate transfer with dedicated retry policy
+            // Validate transfer with dedicated retry policy and enhanced error handling
             try {
+                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Starting validation for transfer ID: {} - Attempt will retry up to 20 times for connectivity issues", transferId);
+                
                 validationActivities.validateTransfer(transferRequest);
                 currentResponse.setStatus(TransferStatus.VALIDATED);
-                accountActivities.updateTransferStatus(transferId, TransferStatus.VALIDATED.name());
+                persistenceActivities.updateTransferStatus(transferId, TransferStatus.VALIDATED.name());
+                
+                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Transfer validation successful for ID: {}", transferId);
+                    
             } catch (ActivityFailure e) {
+                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .error("Transfer validation failed permanently for ID: {} after all retries. Error: {}", transferId, e.getMessage());
+                    
                 currentResponse.setStatus(TransferStatus.FAILED);
-                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), e.getMessage());
-                notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
+                String truncatedError = e.getMessage().length() > 200 ? 
+                    e.getMessage().substring(0, 200) + "..." : e.getMessage();
+                persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), truncatedError);
+                notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), truncatedError);
                 throw e;
             }
 
@@ -128,13 +153,13 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
             } catch (ActivityFailure e) {
                 currentResponse.setStatus(TransferStatus.COMPENSATING);
                 currentResponse.setFailureReason(e.getMessage());
-                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATING.name(), e.getMessage());
+                persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATING.name(), e.getMessage());
                 
                 // Compensate all activities in reverse order
                 saga.compensate();
                 
                 currentResponse.setStatus(TransferStatus.COMPENSATED);
-                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATED.name(), e.getMessage());
+                persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATED.name(), e.getMessage());
                 notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
                 
                 throw e;
@@ -142,14 +167,14 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
             // Complete the transfer with notifications
             currentResponse.setStatus(TransferStatus.COMPLETED);
-            accountActivities.updateTransferStatus(transferId, TransferStatus.COMPLETED.name());
+            persistenceActivities.updateTransferStatus(transferId, TransferStatus.COMPLETED.name());
             notificationActivities.notifyTransferCompleted(currentResponse.getTransferId());
         } catch (ActivityFailure e) {
             // If we haven't handled the error already, do so now
             if (currentResponse.getStatus() != TransferStatus.FAILED && 
                 currentResponse.getStatus() != TransferStatus.COMPENSATED) {
                 currentResponse.setStatus(TransferStatus.FAILED);
-                accountActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), e.getMessage());
+                persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), e.getMessage());
                 notificationActivities.notifyTransferFailed(currentResponse.getTransferId(), e.getMessage());
             }
             throw e;

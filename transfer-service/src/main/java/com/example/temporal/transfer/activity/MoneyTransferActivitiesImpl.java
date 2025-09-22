@@ -1,6 +1,7 @@
 package com.example.temporal.transfer.activity;
 
 import com.example.temporal.common.dto.TransferRequest;
+import com.example.temporal.common.exception.ValidationException;
 import com.example.temporal.common.model.TransferStatus;
 import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.transfer.client.AccountServiceClient;
@@ -29,7 +30,44 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     @Override
     public void validateTransfer(final TransferRequest request) {
         log.info("Validating transfer request: {}", request);
-        validationServiceClient.validateTransfer(request);
+        try {
+            validationServiceClient.validateTransfer(request);
+            log.info("Transfer validation successful for request: {}", request);
+        } catch (Exception e) {
+            log.warn("Transfer validation failed for request: {} - Error: {}", request, e.getMessage());
+            
+            // Distinguir entre erros temporários e permanentes
+            if (isTemporaryError(e)) {
+                log.info("Temporary error detected, will retry: {}", e.getMessage());
+                throw e; // Permite retry
+            } else if (isValidationError(e)) {
+                log.error("Business validation error, will not retry: {}", e.getMessage());
+                throw new ValidationException("Validation failed: " + e.getMessage(), e);
+            } else {
+                log.warn("Unknown error, will retry: {}", e.getMessage());
+                throw e; // Por segurança, permite retry para erros desconhecidos
+            }
+        }
+    }
+    
+    private boolean isTemporaryError(Exception e) {
+        String message = e.getMessage().toLowerCase();
+        return message.contains("connection refused") ||
+               message.contains("timeout") ||
+               message.contains("connection reset") ||
+               message.contains("network") ||
+               message.contains("unavailable") ||
+               e instanceof java.net.ConnectException ||
+               e instanceof java.net.SocketTimeoutException;
+    }
+    
+    private boolean isValidationError(Exception e) {
+        String message = e.getMessage().toLowerCase();
+        return message.contains("insufficient funds") ||
+               message.contains("invalid account") ||
+               message.contains("account not found") ||
+               message.contains("invalid amount") ||
+               message.contains("validation failed");
     }
 
     @Override
