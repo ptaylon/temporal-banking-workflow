@@ -50,7 +50,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
         }
     }
     
-    private boolean isTemporaryError(Exception e) {
+    private boolean isTemporaryError(final Exception e) {
         String message = e.getMessage().toLowerCase();
         return message.contains("connection refused") ||
                message.contains("timeout") ||
@@ -61,7 +61,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
                e instanceof java.net.SocketTimeoutException;
     }
     
-    private boolean isValidationError(Exception e) {
+    private boolean isValidationError(final Exception e) {
         String message = e.getMessage().toLowerCase();
         return message.contains("insufficient funds") ||
                message.contains("invalid account") ||
@@ -83,20 +83,22 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     }
 
     @Override
-    public void creditAccount(String accountNumber, BigDecimal amount) {
+    public void creditAccount(final String accountNumber, final BigDecimal amount) {
+        //throw new RuntimeException("falha no credito");
+
         log.info("Crediting account {} amount {}", accountNumber, amount);
         accountServiceClient.creditAccount(accountNumber, amount);
     }
 
     @Override
-    public void unlockAccounts(String sourceAccountNumber, String destinationAccountNumber) {
+    public void unlockAccounts(final String sourceAccountNumber, final String destinationAccountNumber) {
         log.info("Unlocking accounts: {} and {}", sourceAccountNumber, destinationAccountNumber);
         // In a real implementation, you would have an endpoint to unlock accounts
         // This is typically done automatically when the transaction is committed or rolled back
     }
 
     @Override
-    public void compensateDebit(String accountNumber, BigDecimal amount) {
+    public void compensateDebit(final String accountNumber, final BigDecimal amount) {
         log.info("Compensating debit for account {} amount {}", accountNumber, amount);
         accountServiceClient.creditAccount(accountNumber, amount); // Reverse the debit
     }
