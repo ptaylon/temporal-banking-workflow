@@ -15,7 +15,7 @@ public class TransferControlService {
 
     private final WorkflowClient workflowClient;
 
-    private boolean isWorkflowActive(String workflowId) {
+    protected boolean isWorkflowActive(String workflowId) {
         try {
             var workflowStub = workflowClient.newUntypedWorkflowStub(workflowId);
             var execution = workflowStub.getExecution();

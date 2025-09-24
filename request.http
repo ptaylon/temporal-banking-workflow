@@ -25,6 +25,13 @@
 # - NÃO termine workflows via Temporal Web UI
 # - Terminação externa causa TerminatedFailure
 #
+# 🎯 IMPLEMENTAÇÃO ELEGANTE:
+# - Cancel usa CancellationScope (propagação automática)
+# - Pause/Resume usa executeStepWithPauseCheck (verificação elegante)
+# - Não precisa mais waitIfPaused() espalhado pelo código
+# - Cancelamento é instantâneo e elegante
+# - Pause/Resume são responsivos e limpos
+#
 # FUNCIONALIDADES IMPLEMENTADAS:
 # - Signals & Queries: pause/resume/cancel transferências
 # - Feature Flags: controle dinâmico de funcionalidades

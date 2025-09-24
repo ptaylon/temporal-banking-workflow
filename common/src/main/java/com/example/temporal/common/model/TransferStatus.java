@@ -7,6 +7,7 @@ public enum TransferStatus {
     PROCESSING,
     COMPLETED,
     FAILED,
+    CANCELLED,
     COMPENSATING,
     COMPENSATED
 }

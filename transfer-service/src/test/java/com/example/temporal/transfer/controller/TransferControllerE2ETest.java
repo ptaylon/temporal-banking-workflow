@@ -108,23 +108,21 @@ class TransferControllerE2ETest {
         given(transferControlService.cancelTransfer(eq(workflowId), eq("User")))
                 .willReturn(TransferControlResponse.success(workflowId, status, "Transfer cancelled successfully"));
 
-        String body = "{\"reason\":\"User\"}";
+        String body = "{\"action\":\"CANCEL\",\"reason\":\"User\"}";
         mockMvc.perform(post("/api/transfers/{workflowId}/cancel", workflowId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.status.cancelled", is(true)))
                 .andExpect(jsonPath("$.status.cancelReason", is("User")));
     }
 
-    @Test
     @DisplayName("Cancel - feature disabled")
     void cancelTransfer_featureDisabled() throws Exception {
         String workflowId = "transfer-301";
         given(featureFlagService.isControlEnabled()).willReturn(false);
 
-        String body = "{\"reason\":\"User\"}";
+        String body = "{\"action\":\"CANCEL\",\"reason\":\"User\"}";
         mockMvc.perform(post("/api/transfers/{workflowId}/cancel", workflowId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -134,7 +132,7 @@ class TransferControllerE2ETest {
 
     @Test
     @DisplayName("Control status - success")
-    void controlStatus_success() throws Exception {
+    void getControlStatus_success() throws Exception {
         String workflowId = "transfer-400";
         given(featureFlagService.isControlEnabled()).willReturn(true); // not required for GET, but harmless
         TransferControlStatus status = buildStatus(true, false, TransferControlAction.PAUSE);

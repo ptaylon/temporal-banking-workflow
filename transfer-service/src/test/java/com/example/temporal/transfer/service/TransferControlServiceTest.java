@@ -27,12 +27,20 @@ public class TransferControlServiceTest {
 
     @Mock
     private MoneyTransferWorkflow workflowStub;
-
     private TransferControlService transferControlService;
 
     @BeforeEach
     void setUp() {
         transferControlService = new TransferControlService(workflowClient);
+    }
+    
+    private TransferControlService createTestService() {
+        return new TransferControlService(workflowClient) {
+            @Override
+            protected boolean isWorkflowActive(String workflowId) {
+                return true; // Always return active for tests
+            }
+        };
     }
 
     @Test
@@ -41,12 +49,14 @@ public class TransferControlServiceTest {
         String workflowId = "transfer-123";
         TransferControlStatus mockStatus = createMockControlStatus(true, false, TransferControlAction.PAUSE);
         
+        TransferControlService testService = createTestService();
+        
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         when(workflowStub.getControlStatus()).thenReturn(mockStatus);
 
         // Act
-        TransferControlResponse response = transferControlService.pauseTransfer(workflowId);
+        TransferControlResponse response = testService.pauseTransfer(workflowId);
 
         // Assert
         assertTrue(response.isSuccess());
@@ -63,13 +73,14 @@ public class TransferControlServiceTest {
     void testPauseTransferFailure() {
         // Arrange
         String workflowId = "transfer-123";
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         doThrow(new RuntimeException("Workflow not found")).when(workflowStub).pauseTransfer();
 
         // Act
-        TransferControlResponse response = transferControlService.pauseTransfer(workflowId);
+        TransferControlResponse response = testService.pauseTransfer(workflowId);
 
         // Assert
         assertFalse(response.isSuccess());
@@ -85,13 +96,14 @@ public class TransferControlServiceTest {
         // Arrange
         String workflowId = "transfer-456";
         TransferControlStatus mockStatus = createMockControlStatus(false, false, TransferControlAction.RESUME);
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         when(workflowStub.getControlStatus()).thenReturn(mockStatus);
 
         // Act
-        TransferControlResponse response = transferControlService.resumeTransfer(workflowId);
+        TransferControlResponse response = testService.resumeTransfer(workflowId);
 
         // Assert
         assertTrue(response.isSuccess());
@@ -108,13 +120,14 @@ public class TransferControlServiceTest {
     void testResumeTransferFailure() {
         // Arrange
         String workflowId = "transfer-456";
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         doThrow(new RuntimeException("Workflow not running")).when(workflowStub).resumeTransfer();
 
         // Act
-        TransferControlResponse response = transferControlService.resumeTransfer(workflowId);
+        TransferControlResponse response = testService.resumeTransfer(workflowId);
 
         // Assert
         assertFalse(response.isSuccess());
@@ -132,13 +145,14 @@ public class TransferControlServiceTest {
         String reason = "User requested cancellation";
         TransferControlStatus mockStatus = createMockControlStatus(false, true, TransferControlAction.CANCEL);
         mockStatus.setCancelReason(reason);
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         when(workflowStub.getControlStatus()).thenReturn(mockStatus);
 
         // Act
-        TransferControlResponse response = transferControlService.cancelTransfer(workflowId, reason);
+        TransferControlResponse response = testService.cancelTransfer(workflowId, reason);
 
         // Assert
         assertTrue(response.isSuccess());
@@ -158,13 +172,14 @@ public class TransferControlServiceTest {
         String workflowId = "transfer-789";
         TransferControlStatus mockStatus = createMockControlStatus(false, true, TransferControlAction.CANCEL);
         mockStatus.setCancelReason("Cancelled by user");
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         when(workflowStub.getControlStatus()).thenReturn(mockStatus);
 
         // Act
-        TransferControlResponse response = transferControlService.cancelTransfer(workflowId, null);
+        TransferControlResponse response = testService.cancelTransfer(workflowId, null);
 
         // Assert
         assertTrue(response.isSuccess());
@@ -178,13 +193,14 @@ public class TransferControlServiceTest {
         // Arrange
         String workflowId = "transfer-789";
         String reason = "System error";
+        TransferControlService testService = createTestService();
         
         when(workflowClient.newWorkflowStub(MoneyTransferWorkflow.class, workflowId))
                 .thenReturn(workflowStub);
         doThrow(new RuntimeException("Cannot cancel completed workflow")).when(workflowStub).cancelTransfer(reason);
 
         // Act
-        TransferControlResponse response = transferControlService.cancelTransfer(workflowId, reason);
+        TransferControlResponse response = testService.cancelTransfer(workflowId, reason);
 
         // Assert
         assertFalse(response.isSuccess());
