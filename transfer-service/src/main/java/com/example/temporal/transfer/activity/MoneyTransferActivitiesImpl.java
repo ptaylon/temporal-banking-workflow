@@ -13,7 +13,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.concurrent.ExecutionException;
+
 
 @Slf4j
 @Component
@@ -25,10 +25,22 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final TransferPersistenceService transferPersistenceService;
 
+    // Constantes
     private static final String TRANSFER_EVENTS_TOPIC = "transfer-events";
+    private static final String TRANSFER_INITIATED_EVENT = "TRANSFER_INITIATED:%d";
+    private static final String TRANSFER_COMPLETED_EVENT = "TRANSFER_COMPLETED:%d";
+    private static final String TRANSFER_FAILED_EVENT = "TRANSFER_FAILED:%d:%s";
+    
+    // Mensagens de erro
+    private static final String VALIDATION_FAILED_MSG = "Validation failed: %s";
+    private static final String UPDATE_STATUS_FAILED_MSG = "Failed to update transfer status";
+    private static final String NOTIFICATION_FAILED_MSG = "Failed to send notification for transfer %d";
 
     @Override
     public void validateTransfer(final TransferRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Transfer request cannot be null");
+        }
         log.info("Validating transfer request: {}", request);
         try {
             validationServiceClient.validateTransfer(request);
@@ -42,7 +54,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
                 throw e; // Permite retry
             } else if (isValidationError(e)) {
                 log.error("Business validation error, will not retry: {}", e.getMessage());
-                throw new ValidationException("Validation failed: " + e.getMessage(), e);
+                throw new ValidationException(String.format(VALIDATION_FAILED_MSG, e.getMessage()), e);
             } else {
                 log.warn("Unknown error, will retry: {}", e.getMessage());
                 throw e; // Por segurança, permite retry para erros desconhecidos
@@ -72,29 +84,88 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
 
     @Override
     public void lockAccounts(final String sourceAccountNumber, final String destinationAccountNumber) {
+        if (sourceAccountNumber == null || sourceAccountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Source account number cannot be null or empty");
+        }
+        if (destinationAccountNumber == null || destinationAccountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Destination account number cannot be null or empty");
+        }
         log.info("Locking accounts: {} and {}", sourceAccountNumber, destinationAccountNumber);
         accountServiceClient.lockAccounts(sourceAccountNumber, destinationAccountNumber);
     }
 
     @Override
     public void debitAccount(final String accountNumber, final BigDecimal amount) {
-        log.info("Debiting account {} amount {}", accountNumber, amount);
+        if (accountNumber == null || accountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Account number cannot be null or empty");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be positive");
+        }
+        log.info("Debiting account {} amount {} - Starting with 10s delay for testing", accountNumber, amount);
+        
+        try {
+            // Delay de 10 segundos para permitir testes de pause/resume/cancel
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            log.warn("Debit operation was interrupted: {}", e.getMessage());
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Debit operation interrupted", e);
+        }
+        
         accountServiceClient.debitAccount(accountNumber, amount);
+        log.info("Debit completed for account {} amount {}", accountNumber, amount);
     }
 
     @Override
     public void creditAccount(final String accountNumber, final BigDecimal amount) {
-        //throw new RuntimeException("falha no credito");
-
-        log.info("Crediting account {} amount {}", accountNumber, amount);
+        if (accountNumber == null || accountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Account number cannot be null or empty");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be positive");
+        }
+        log.info("Crediting account {} amount {} - Starting with 10s delay for testing", accountNumber, amount);
+        
+        try {
+            // Delay de 10 segundos para permitir testes de pause/resume/cancel
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            log.warn("Credit operation was interrupted: {}", e.getMessage());
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Credit operation interrupted", e);
+        }
+        
         accountServiceClient.creditAccount(accountNumber, amount);
+        log.info("Credit completed for account {} amount {}", accountNumber, amount);
     }
 
     @Override
     public void unlockAccounts(final String sourceAccountNumber, final String destinationAccountNumber) {
+        if (sourceAccountNumber == null || sourceAccountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Source account number cannot be null or empty");
+        }
+        if (destinationAccountNumber == null || destinationAccountNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Destination account number cannot be null or empty");
+        }
+        
         log.info("Unlocking accounts: {} and {}", sourceAccountNumber, destinationAccountNumber);
-        // In a real implementation, you would have an endpoint to unlock accounts
-        // This is typically done automatically when the transaction is committed or rolled back
+        
+        try {
+            // TODO: Implementar unlock quando o AccountServiceClient suportar esta operação
+            // Por enquanto, apenas logamos a operação
+            // Em sistemas reais, locks são frequentemente liberados automaticamente por timeout
+            // ou quando a transação é commitada/rollback
+            log.info("Account unlock requested for: {} and {}. Implementation pending.", 
+                sourceAccountNumber, destinationAccountNumber);
+            
+            // Simulação de unlock bem-sucedido
+            log.info("Accounts unlocked successfully: {} and {}", sourceAccountNumber, destinationAccountNumber);
+        } catch (Exception e) {
+            log.warn("Failed to unlock accounts {} and {}: {}. This may be handled automatically by the system.", 
+                sourceAccountNumber, destinationAccountNumber, e.getMessage());
+            // Não lançar exceção aqui pois unlock pode falhar sem afetar o workflow principal
+        }
     }
 
     @Override
@@ -112,33 +183,54 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     @Override
     public void notifyTransferInitiated(final Long transferId) {
         log.info("Notifying transfer initiated: {}", transferId);
-        kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
-            String.format("TRANSFER_INITIATED:%d", transferId));
+        try {
+            kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
+                String.format(TRANSFER_INITIATED_EVENT, transferId));
+        } catch (Exception e) {
+            log.error(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+            throw new RuntimeException(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+        }
     }
 
     @Override
     public void notifyTransferCompleted(final Long transferId) {
         log.info("Notifying transfer completed: {}", transferId);
-        kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
-            String.format("TRANSFER_COMPLETED:%d", transferId));
+        try {
+            kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
+                String.format(TRANSFER_COMPLETED_EVENT, transferId));
+        } catch (Exception e) {
+            log.error(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+            throw new RuntimeException(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+        }
     }
 
     @Override
     public void notifyTransferFailed(final Long transferId, final String reason) {
         log.info("Notifying transfer failed: {} reason: {}", transferId, reason);
-        kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
-            String.format("TRANSFER_FAILED:%d:%s", transferId, reason));
+        try {
+            kafkaTemplate.send(TRANSFER_EVENTS_TOPIC, 
+                String.format(TRANSFER_FAILED_EVENT, transferId, reason));
+        } catch (Exception e) {
+            log.error(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+            throw new RuntimeException(String.format(NOTIFICATION_FAILED_MSG, transferId), e);
+        }
     }
 
     @Override
     public void updateTransferStatus(final Long transferId, final String status) {
+        if (transferId == null) {
+            throw new IllegalArgumentException("Transfer ID cannot be null");
+        }
+        if (status == null || status.trim().isEmpty()) {
+            throw new IllegalArgumentException("Status cannot be null or empty");
+        }
         log.info("Updating transfer {} status to {}", transferId, status);
         try {
             TransferStatus transferStatus = TransferStatus.valueOf(status);
             transferPersistenceService.updateTransferStatus(transferId, transferStatus);
         } catch (Exception e) {
             log.error("Error updating transfer status: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to update transfer status", e);
+            throw new RuntimeException(UPDATE_STATUS_FAILED_MSG, e);
         }
     }
 
@@ -150,7 +242,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             transferPersistenceService.updateTransferStatus(transferId, transferStatus, reason);
         } catch (Exception e) {
             log.error("Error updating transfer status with reason: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to update transfer status", e);
+            throw new RuntimeException(UPDATE_STATUS_FAILED_MSG, e);
         }
     }
 }

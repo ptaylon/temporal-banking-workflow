@@ -505,8 +505,17 @@ O sistema bancário atual implementa um fluxo básico de transferências usando 
 
 ## Roadmap de Implementação Focado em Features Temporal
 
-### Fase 1: Comunicação e Controle (1-2 semanas)
+### ✅ **CONCLUÍDO - Correções de Base (23/09/2025)**
+**Status**: ✅ **COMPLETO** - Build bem-sucedido
+- ✅ **WorkflowFeatureConfig** - Implementação completa com @ConfigurationProperties
+- ✅ **Duplicação de código** - Removida entre TransferService e TransferControlService
+- ✅ **Testes corrigidos** - TransferControlServiceTest atualizado
+- ✅ **Qualidade de código** - Validações, tratamento de exceções e constantes
+- ✅ **Build do projeto** - Todos os módulos compilam sem erros
+
+### Fase 1: Comunicação e Controle (1-2 semanas) - **EM ANDAMENTO**
 **Prioridade**: 🔥 Alta - Features fundamentais não utilizadas
+**Status**: 🚧 **PRONTO PARA INICIAR** - Base técnica estabelecida
 1. **Signals & Queries** - Pausar/retomar transferências, consulta de status
 2. **Timers** - Delays configuráveis e timeouts escalonados
 3. **Search Attributes** - Indexação para observabilidade

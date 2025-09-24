@@ -2,6 +2,8 @@ package com.example.temporal.transfer.workflow;
 
 import com.example.temporal.common.dto.TransferRequest;
 import com.example.temporal.common.dto.TransferResponse;
+import com.example.temporal.common.dto.TransferControlStatus;
+import com.example.temporal.common.dto.TransferControlAction;
 import com.example.temporal.common.model.TransferStatus;
 import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.common.workflow.MoneyTransferWorkflow;
@@ -13,11 +15,20 @@ import io.temporal.workflow.Saga;
 import io.temporal.workflow.Workflow;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Random;
 
 public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
     private TransferResponse currentResponse;
+    
+    // Campos de controle para signals e queries
+    private boolean paused = false;
+    private boolean cancelled = false;
+    private String pauseReason;
+    private String cancelReason;
+    private TransferControlAction lastControlAction;
+    private LocalDateTime lastControlTimestamp;
 
     // Activity stubs with specific configurations
     private final MoneyTransferActivities validationActivities = Workflow.newActivityStub(MoneyTransferActivities.class,
@@ -102,9 +113,27 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         initializeTransferResponse(transferRequest, transferId);
 
         try {
+            // Verificar se foi cancelado antes de iniciar
+            checkCancellation();
+            
             initializeTransfer(transferId);
+            
+            // Aguardar se pausado após inicialização
+            waitIfPaused();
+            checkCancellation();
+            
             validateTransfer(transferRequest, transferId);
+            
+            // Aguardar se pausado após validação
+            waitIfPaused();
+            checkCancellation();
+            
             executeAccountOperations(transferRequest, saga, transferId);
+            
+            // Aguardar se pausado após operações de conta
+            waitIfPaused();
+            checkCancellation();
+            
             completeTransfer(transferId);
         } catch (ActivityFailure e) {
             handleTransferFailure(transferId, e);
@@ -294,8 +323,115 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         return errorMessage.length() > 200 ? errorMessage.substring(0, 200) + "..." : errorMessage;
     }
 
+    /**
+     * Aguarda enquanto o workflow estiver pausado
+     */
+    private void waitIfPaused() {
+        if (paused) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Transfer paused, waiting for resume signal. WorkflowId: {}", 
+                          Workflow.getInfo().getWorkflowId());
+        }
+        Workflow.await(() -> !paused);
+    }
+
+    /**
+     * Verifica se o workflow foi cancelado e lança exceção se necessário
+     */
+    private void checkCancellation() {
+        if (cancelled) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Transfer cancelled. Reason: {}. WorkflowId: {}", 
+                          cancelReason, Workflow.getInfo().getWorkflowId());
+            throw new RuntimeException("Transfer cancelled: " + cancelReason);
+        }
+    }
+
     @Override
     public TransferResponse getStatus() {
         return currentResponse;
+    }
+
+    // Signal Methods para controle de transferência
+    @Override
+    public void pauseTransfer() {
+        // Verificar se a funcionalidade está habilitada via side effect
+        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> {
+            // Em um cenário real, isso viria de uma configuração externa
+            // Por enquanto, assumimos que está habilitado
+            return true;
+        });
+        
+        if (!controlEnabled) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .warn("Pause functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+            return;
+        }
+        
+        this.paused = true;
+        this.lastControlAction = TransferControlAction.PAUSE;
+        this.lastControlTimestamp = LocalDateTime.now();
+        
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer paused via signal. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+    }
+
+    @Override
+    public void resumeTransfer() {
+        // Verificar se a funcionalidade está habilitada
+        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> true);
+        
+        if (!controlEnabled) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .warn("Resume functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+            return;
+        }
+        
+        this.paused = false;
+        this.pauseReason = null;
+        this.lastControlAction = TransferControlAction.RESUME;
+        this.lastControlTimestamp = LocalDateTime.now();
+        
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer resumed via signal. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+    }
+
+    @Override
+    public void cancelTransfer(String reason) {
+        // Verificar se a funcionalidade está habilitada
+        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> true);
+        
+        if (!controlEnabled) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .warn("Cancel functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+            return;
+        }
+        
+        this.cancelled = true;
+        this.cancelReason = reason;
+        this.lastControlAction = TransferControlAction.CANCEL;
+        this.lastControlTimestamp = LocalDateTime.now();
+        
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer cancelled via signal. Reason: {}. WorkflowId: {}", 
+                      reason, Workflow.getInfo().getWorkflowId());
+    }
+
+    // Query Methods para status de controle
+    @Override
+    public boolean isPaused() {
+        return paused;
+    }
+
+    @Override
+    public TransferControlStatus getControlStatus() {
+        return new TransferControlStatus()
+                .setPaused(paused)
+                .setCancelled(cancelled)
+                .setPauseReason(pauseReason)
+                .setCancelReason(cancelReason)
+                .setLastControlAction(lastControlAction)
+                .setLastControlTimestamp(lastControlTimestamp)
+                .setWorkflowStatus(currentResponse != null ? currentResponse.getStatus().name() : "UNKNOWN");
     }
 }

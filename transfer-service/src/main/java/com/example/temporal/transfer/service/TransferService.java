@@ -8,18 +8,20 @@ import com.example.temporal.common.workflow.MoneyTransferWorkflow;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.UUID;
+
 import java.util.concurrent.CompletableFuture;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TransferService {
+
+    private static final Logger log = LoggerFactory.getLogger(TransferService.class);
 
     private final WorkflowClient workflowClient;
     private final TransferPersistenceService transferPersistenceService;
@@ -71,8 +73,24 @@ public class TransferService {
                 log.info("Workflow completed for transfer ID: {} with status: {}", 
                     request.getTransferId(), response.getStatus());
                     
+            } catch (io.temporal.failure.TerminatedFailure e) {
+                log.warn("Workflow terminated externally for transfer ID: {} - Reason: {}", 
+                    request.getTransferId(), e.getMessage());
+                // Workflow foi terminado via Web UI ou externamente - não é erro crítico
+            } catch (io.temporal.failure.CanceledFailure e) {
+                log.info("Workflow cancelled for transfer ID: {} - Reason: {}", 
+                    request.getTransferId(), e.getMessage());
+                // Workflow foi cancelado via signal - comportamento esperado
+            } catch (io.temporal.client.WorkflowFailedException e) {
+                if (e.getCause() instanceof io.temporal.failure.TerminatedFailure) {
+                    log.warn("Workflow terminated externally for transfer ID: {} - {}", 
+                        request.getTransferId(), e.getMessage());
+                } else {
+                    log.error("Workflow failed for transfer ID: {} - {}", 
+                        request.getTransferId(), e.getMessage(), e);
+                }
             } catch (Exception e) {
-                log.error("Error executing workflow for transfer ID: {} - {}", 
+                log.error("Unexpected error executing workflow for transfer ID: {} - {}", 
                     request.getTransferId(), e.getMessage(), e);
             }
         });
@@ -136,4 +154,5 @@ public class TransferService {
             throw new RuntimeException("Error retrieving transfer status: " + e.getMessage());
         }
     }
+
 }

@@ -1,4 +1,43 @@
 
+# Temporal Banking Workflow - API Testing
+# 
+# INSTRUÇÕES PARA TESTE DAS NOVAS FUNCIONALIDADES:
+# 
+# 1. Execute os requests na ordem para criar contas e transferências
+# 2. Os requests 4 e 4b CAPTURAM AUTOMATICAMENTE workflowId e transferId em variáveis
+# 3. Todos os requests seguintes usam {{workflowId}} e {{transferId}} automaticamente
+# 4. Teste as feature flags para habilitar/desabilitar funcionalidades
+# 5. Observe como o controle é bloqueado quando features estão desabilitadas
+# 
+# VARIÁVEIS AUTOMÁTICAS:
+# - {{workflowId}} - Capturado da resposta da transferência
+# - {{transferId}} - Capturado da resposta da transferência
+# - Não precisa substituir manualmente os IDs!
+#
+# DELAYS PARA TESTE:
+# - Débito: 10 segundos de delay
+# - Crédito: 10 segundos de delay
+# - Total: ~20 segundos por transferência
+# - Use esse tempo para testar pause/resume/cancel!
+#
+# ⚠️ IMPORTANTE - EVITE TERMINAR VIA WEB UI:
+# - Use APENAS os endpoints de cancel (request 8)
+# - NÃO termine workflows via Temporal Web UI
+# - Terminação externa causa TerminatedFailure
+#
+# FUNCIONALIDADES IMPLEMENTADAS:
+# - Signals & Queries: pause/resume/cancel transferências
+# - Feature Flags: controle dinâmico de funcionalidades
+# - Batch Operations: controle de múltiplas transferências
+# - Validation & Error Handling: tratamento robusto de erros
+#
+# PORTAS DOS SERVIÇOS:
+# - Account Service: 8081
+# - Transfer Service: 8082 (MAIN - com novas funcionalidades)
+# - Audit Service: 8085
+# - Notification Service: 8086
+# - Validation Service: 8087
+
 ### 1. Create Account - João Silva
 POST http://localhost:8081/api/accounts
 Content-Type: application/json
@@ -24,7 +63,7 @@ Content-Type: application/json
 ### 3. Get Account by Number
 GET http://localhost:8081/api/accounts/123456
 
-### 4. Transfer Money
+### 4. Transfer Money (Small Amount - Fast) - Captures workflowId
 POST http://localhost:8082/api/transfers
 Content-Type: application/json
 
@@ -35,16 +74,168 @@ Content-Type: application/json
   "currency": "BRL"
 }
 
-### 5. Get Transfer Status (replace {workflowId} with actual ID from transfer response)
-GET http://localhost:8082/api/transfers/{workflowId}
+> {%
+client.test("Transfer initiated successfully", function() {
+    client.assert(response.status === 202, "Expected status 202");
+    client.assert(response.body.status === "INITIATED", "Expected status INITIATED");
+});
 
-### 6. Get Audit Trail for Account
+client.test("Capture workflowId", function() {
+    client.global.set("workflowId", response.body.workflowId);
+    client.global.set("transferId", response.body.transferId);
+    console.log("Captured workflowId: " + response.body.workflowId);
+    console.log("Captured transferId: " + response.body.transferId);
+});
+%}
+
+### 4b. Transfer Money (Large Amount - Slower for Testing Control) - Captures workflowId
+POST http://localhost:8082/api/transfers
+Content-Type: application/json
+
+{
+  "sourceAccountNumber": "123456",
+  "destinationAccountNumber": "789012",
+  "amount": 5000.00,
+  "currency": "BRL"
+}
+
+> {%
+client.test("Large transfer initiated successfully", function() {
+    client.assert(response.status === 202, "Expected status 202");
+    client.assert(response.body.status === "INITIATED", "Expected status INITIATED");
+});
+
+client.test("Capture workflowId for large transfer", function() {
+    client.global.set("workflowId", response.body.workflowId);
+    client.global.set("transferId", response.body.transferId);
+    console.log("Captured workflowId: " + response.body.workflowId);
+    console.log("Captured transferId: " + response.body.transferId);
+});
+%}
+
+### 5. Get Transfer Status (uses captured workflowId)
+GET http://localhost:8082/api/transfers/workflow/{{workflowId}}
+
+### 5b. Get Transfer Status by Transfer ID (uses captured transferId)
+GET http://localhost:8082/api/transfers/{{transferId}}/status
+
+### 6. Transfer Control - Pause Transfer (uses captured workflowId)
+POST http://localhost:8082/api/transfers/{{workflowId}}/pause
+
+### 7. Transfer Control - Resume Transfer (uses captured workflowId)
+POST http://localhost:8082/api/transfers/{{workflowId}}/resume
+
+### 8. Transfer Control - Cancel Transfer (uses captured workflowId)
+# NOTE: Cancel requer body JSON com action obrigatório
+POST http://localhost:8082/api/transfers/{{workflowId}}/cancel
+Content-Type: application/json
+
+{
+  "action": "CANCEL",
+  "reason": "User requested cancellation for testing"
+}
+
+### 9. Transfer Control - Get Control Status (uses captured workflowId)
+GET http://localhost:8082/api/transfers/{{workflowId}}/control-status
+
+### 10. Transfer Control - Batch Pause (uses captured workflowId only)
+# NOTE: Para testar batch, você precisa de múltiplas transferências ativas
+# Execute request 4 várias vezes para criar múltiplos workflows
+POST http://localhost:8082/api/transfers/batch/pause
+Content-Type: application/json
+
+[
+  "{{workflowId}}"
+]
+
+### 11. Transfer Control - Batch Cancel (uses captured workflowId only)
+# NOTE: Para testar batch, você precisa de múltiplas transferências ativas
+# Execute request 4 várias vezes para criar múltiplos workflows
+POST http://localhost:8082/api/transfers/batch/cancel
+Content-Type: application/json
+
+{
+  "workflowIds": [
+    "{{workflowId}}"
+  ],
+  "reason": "Batch cancellation for maintenance"
+}
+
+### 12. Feature Flags - Get All Feature Status
+GET http://localhost:8082/api/features/status
+
+### 13. Feature Flags - Enable Only Basic Features
+POST http://localhost:8082/api/features/basic-only
+
+### 14. Feature Flags - Disable Experimental Features
+POST http://localhost:8082/api/features/disable-experimental
+
+### 15. Feature Flags - Reset to Defaults
+POST http://localhost:8082/api/features/reset
+
+### 16. Feature Flags - Enable Control Features
+POST http://localhost:8082/api/features/control/enable
+
+### 17. Feature Flags - Disable Control Features (will block pause/resume/cancel)
+POST http://localhost:8082/api/features/control/disable
+
+### 18. Feature Flags - Get Feature Summary
+GET http://localhost:8082/api/features/summary
+
+### 19. Get Transfers by Account
+GET http://localhost:8082/api/transfers/account/123456
+
+### 20. Get Transfer by ID (uses captured transferId)
+GET http://localhost:8082/api/transfers/transfer/{{transferId}}
+
+### 21. Test Control with Feature Disabled (should return 503)
+# First disable control features with request #17, then try to pause
+POST http://localhost:8082/api/transfers/{{workflowId}}/pause
+
+### 22. TESTE COMPLETO DE PAUSE/RESUME/CANCEL
+# INSTRUÇÕES PASSO A PASSO:
+# 
+# PASSO 1: Execute request 4 para iniciar transferência
+# - Isso captura automaticamente o workflowId na variável {{workflowId}}
+# 
+# PASSO 2: RAPIDAMENTE (dentro de 10s) execute request 6 para pausar
+# - Usa automaticamente o {{workflowId}} capturado
+# 
+# PASSO 3: Verifique status com request 9
+# - Deve mostrar "paused": true
+# 
+# PASSO 4: Execute request 7 para retomar OU request 8 para cancelar
+# - Ambos usam automaticamente o {{workflowId}} capturado
+#
+# ⚠️ IMPORTANTE:
+# - Use APENAS workflowIds reais capturados das transferências
+# - NÃO use IDs de exemplo como "transfer-example-1"
+# - Sempre execute request 4 primeiro para capturar workflowId
+#
+# TIMING:
+# - 0-10s: Débito (pode pausar aqui)
+# - 10-20s: Crédito (pode pausar aqui também)
+# - 20s+: Transferência completa
+
+### 22b. TESTE DE RESUME APÓS CANCEL
+# CENÁRIO AVANÇADO - Resume depois de Cancel:
+# 
+# PASSO 1: Execute request 4 (inicia transferência)
+# PASSO 2: Execute request 8 (cancel) - dentro de 5s
+# PASSO 3: RAPIDAMENTE execute request 7 (resume) - dentro de mais 5s
+# PASSO 4: Execute request 9 (status) - verificar se cancel foi desfeito
+#
+# RESULTADO ESPERADO:
+# - Se rápido: cancelled=false, lastControlAction=RESUME
+# - Se lento: erro "Workflow is not active"
+
+### 23. Get Audit Trail for Account
 GET http://localhost:8085/api/audit/accounts/123456
 
-### 7. Search Audit Events
+### 24. Search Audit Events
 GET http://localhost:8085/api/audit/search?entityType=accounts&eventTypes=ACCOUNTS_CREATED,ACCOUNTS_UPDATED&start=2024-01-01T00:00:00&end=2024-12-31T23:59:59
 
-### 8. Health Checks
+### 25. Health Checks
 GET http://localhost:8081/actuator/health
 ###
 GET http://localhost:8082/actuator/health
