@@ -159,7 +159,7 @@ make -f Makefile.dev dev-reset-data      # Remove dados de teste
 #### 1. Inicie a Infraestrutura
 
 ```bash
-docker-compose -f docker-compose-banking.yml up -d
+docker-compose -f docker-compose.yml up -d
 ```
 
 #### 2. Configure o CDC

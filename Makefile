@@ -143,11 +143,11 @@ test-all: ## 🧪 Executa todos os testes
 
 test-cdc: ## 🧪 Testa o CDC completo
 	@echo "$(BLUE)🧪 Testando CDC...$(NC)"
-	@./scripts/test-audit-cdc.sh
+	@./config/scripts/test-audit-cdc.sh
 
 test-transfer: ## 🧪 Testa transferência completa
 	@echo "$(BLUE)🧪 Testando transferência...$(NC)"
-	@./scripts/test-transfer.sh
+	@./config/scripts/test-transfer.sh
 
 test-cdc-data: ## 🧪 Testa dados específicos do CDC
 	@echo "$(BLUE)🧪 Testando dados CDC...$(NC)"
@@ -255,11 +255,11 @@ reset-cdc: ## 🔄 Reset completo do CDC
 
 reset-temporal: ## 🔄 Reset workflows Temporal
 	@echo "$(BLUE)🔄 Resetando workflows Temporal...$(NC)"
-	@./scripts/reset-temporal-workflows.sh
+	@./config/scripts/reset-temporal-workflows.sh
 
 reset-audit-consumer: ## 🔄 Reset consumer do audit-service
 	@echo "$(BLUE)🔄 Resetando consumer de auditoria...$(NC)"
-	@./scripts/reset-audit-consumer.sh
+	@./config/scripts/reset-audit-consumer.sh
 
 # ============================================================================
 # 🧹 LIMPEZA
