@@ -2,6 +2,7 @@ package com.example.temporal.audit.controller;
 
 import com.example.temporal.audit.model.AuditEvent;
 import com.example.temporal.audit.service.AuditService;
+import com.example.temporal.audit.config.ApiDelay;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -16,11 +17,13 @@ import java.util.List;
 public class AuditController {
 
     private final AuditService auditService;
+    private final ApiDelay apiDelay;
 
     @GetMapping("/{entityType}/{entityId}")
     public ResponseEntity<List<AuditEvent>> getEntityAuditHistory(
             @PathVariable String entityType,
             @PathVariable String entityId) {
+        apiDelay.sleepIfEnabled();
         return ResponseEntity.ok(auditService.getEventsForEntity(entityType, entityId));
     }
 
@@ -30,6 +33,7 @@ public class AuditController {
             @RequestParam List<String> eventTypes,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        apiDelay.sleepIfEnabled();
         return ResponseEntity.ok(auditService.getEventsByTypeInRange(entityType, eventTypes, start, end));
     }
 }

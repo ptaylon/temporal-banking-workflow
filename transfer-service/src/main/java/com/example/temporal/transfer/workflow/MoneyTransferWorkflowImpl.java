@@ -34,6 +34,13 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
     // CancellationScope para cancelamento elegante
     private CancellationScope mainScope;
 
+    // Configuração de delays por step (configurável via Search Attributes/Headers futuramente)
+    // Por ora, default 20s conforme solicitado
+    private Duration initDelay = Duration.ofSeconds(20);
+    private Duration validateDelay = Duration.ofSeconds(20);
+    private Duration accountsDelay = Duration.ofSeconds(20);
+    private Duration completeDelay = Duration.ofSeconds(20);
+
     // Activity stubs with specific configurations
     private final MoneyTransferActivities validationActivities = Workflow.newActivityStub(MoneyTransferActivities.class,
             createValidationActivityOptions());
@@ -52,7 +59,9 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
      */
     private ActivityOptions createValidationActivityOptions() {
         return ActivityOptions.newBuilder()
-                .setStartToCloseTimeout(Duration.ofSeconds(30))
+                // Aumentado para evitar timeouts em cenários de latência elevada.
+                // Maior que 1h conforme solicitado.
+                .setStartToCloseTimeout(Duration.ofHours(2))
                 .setRetryOptions(RetryOptions.newBuilder()
                         .setInitialInterval(Duration.ofSeconds(2))
                         .setMaximumInterval(Duration.ofMinutes(5))
@@ -68,7 +77,8 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
      */
     private ActivityOptions createAccountActivityOptions() {
         return ActivityOptions.newBuilder()
-                .setStartToCloseTimeout(Duration.ofSeconds(30))
+                // Aumentado para evitar timeouts; maior que 1h conforme solicitado.
+                .setStartToCloseTimeout(Duration.ofHours(2))
                 .setRetryOptions(RetryOptions.newBuilder()
                         .setInitialInterval(Duration.ofSeconds(1))
                         .setMaximumInterval(Duration.ofMinutes(2))
@@ -135,18 +145,21 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
                     .info("Transfer workflow cancelled: {}. Executing rollback via Saga. WorkflowId: {}", 
                           e.getMessage(), Workflow.getInfo().getWorkflowId());
             
-            // IMPORTANTE: Executar rollback via Saga quando cancelado
-            try {
-                saga.compensate();
-                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                        .info("Saga rollback completed successfully. Transfer cancelled cleanly. WorkflowId: {}", 
-                              Workflow.getInfo().getWorkflowId());
-                
-            } catch (Exception sagaException) {
-                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                        .error("Error during Saga rollback: {}. WorkflowId: {}", 
-                               sagaException.getMessage(), Workflow.getInfo().getWorkflowId());
-            }
+            // Executar rollback em um escopo desanexado para não herdar o cancelamento
+            CancellationScope nonCancellable = Workflow.newDetachedCancellationScope(() -> {
+                try {
+                    currentResponse.setStatus(TransferStatus.COMPENSATING);
+                    saga.compensate();
+                    Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                            .info("Saga rollback completed successfully. Transfer cancelled cleanly. WorkflowId: {}", 
+                                  Workflow.getInfo().getWorkflowId());
+                } catch (Exception sagaException) {
+                    Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                            .error("Error during Saga rollback: {}. WorkflowId: {}", 
+                                   sagaException.getMessage(), Workflow.getInfo().getWorkflowId());
+                }
+            });
+            nonCancellable.run();
             
             // Atualizar apenas status local (sem activities após cancelamento)
             currentResponse.setStatus(TransferStatus.CANCELLED);
@@ -163,16 +176,28 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
      */
     private void executeTransferSteps(TransferRequest transferRequest, Saga saga, Long transferId) {
         // Step 1: Initialize
-        executeStepWithPauseCheck(() -> initializeTransfer(transferId));
+        executeStepWithPauseCheck(() -> {
+            sleepIfConfigured(initDelay);
+            initializeTransfer(transferId);
+        });
         
         // Step 2: Validate
-        executeStepWithPauseCheck(() -> validateTransfer(transferRequest, transferId));
+        executeStepWithPauseCheck(() -> {
+            sleepIfConfigured(validateDelay);
+            validateTransfer(transferRequest, transferId);
+        });
         
         // Step 3: Account Operations
-        executeStepWithPauseCheck(() -> executeAccountOperations(transferRequest, saga, transferId));
+        executeStepWithPauseCheck(() -> {
+            sleepIfConfigured(accountsDelay);
+            executeAccountOperations(transferRequest, saga, transferId);
+        });
         
         // Step 4: Complete
-        executeStepWithPauseCheck(() -> completeTransfer(transferId));
+        executeStepWithPauseCheck(() -> {
+            sleepIfConfigured(completeDelay);
+            completeTransfer(transferId);
+        });
     }
     
     /**
@@ -189,6 +214,16 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
         
         // Executar o step
         step.run();
+    }
+
+    /**
+     * Aplica um sleep Workflow-side configurável entre os steps.
+     * Usa Workflow.sleep para ser determinístico e respeitar o relógio virtual.
+     */
+    private void sleepIfConfigured(Duration d) {
+        if (d != null && !d.isZero() && !d.isNegative()) {
+            Workflow.sleep(d);
+        }
     }
 
     /**

@@ -61,7 +61,8 @@ public class TransferService {
                         .setTaskQueue(MoneyTransferWorkflow.QUEUE_NAME)
                         .setWorkflowId(workflowId)
                         .setWorkflowTaskTimeout(java.time.Duration.ofMinutes(1))
-                        .setWorkflowRunTimeout(java.time.Duration.ofHours(1)) // Aumentado para 1 hora
+                        // Aumentado para evitar timeouts em execuções longas; maior que 1h
+                        .setWorkflowRunTimeout(java.time.Duration.ofHours(4))
                         .build();
 
                 MoneyTransferWorkflow workflow = workflowClient.newWorkflowStub(

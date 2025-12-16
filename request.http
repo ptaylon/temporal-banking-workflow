@@ -126,10 +126,10 @@ GET http://localhost:8082/api/transfers/workflow/{{workflowId}}
 ### 5b. Get Transfer Status by Transfer ID (uses captured transferId)
 GET http://localhost:8082/api/transfers/{{transferId}}/status
 
-### 6. Transfer Control - Pause Transfer (uses captured workflowId)
+### 6. Pause Transfer (uses captured workflowId)
 POST http://localhost:8082/api/transfers/{{workflowId}}/pause
 
-### 7. Transfer Control - Resume Transfer (uses captured workflowId)
+### 7. Resume Transfer (uses captured workflowId)
 POST http://localhost:8082/api/transfers/{{workflowId}}/resume
 
 ### 8. Transfer Control - Cancel Transfer (uses captured workflowId)
