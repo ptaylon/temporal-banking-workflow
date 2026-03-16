@@ -1,0 +1,239 @@
+# Hexagonal Architecture - Visual Diagram
+
+## Complete Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         EXTERNAL WORLD                                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐               │
+│  │  Client  │  │ Temporal │  │   Kafka  │  │ Database │               │
+│  │  (HTTP)  │  │    UI    │  │ Consumer │  │   (SQL)  │               │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘               │
+└───────┼─────────────┼─────────────┼─────────────┼────────────────────────┘
+        │             │             │             │
+        ▼             ▼             ▼             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    INFRASTRUCTURE LAYER (Adapters)                       │
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────┐    │
+│  │                    DRIVING ADAPTERS (IN)                        │    │
+│  │  ┌──────────────────────────────────────────────────────┐      │    │
+│  │  │  TransferRestController.java                         │      │    │
+│  │  │  - POST   /api/transfers                             │      │    │
+│  │  │  - GET    /api/transfers/{id}                        │      │    │
+│  │  │  - POST   /api/transfers/{id}/pause                  │      │    │
+│  │  │  - POST   /api/transfers/{id}/cancel                 │      │    │
+│  │  └──────────────────────────────────────────────────────┘      │    │
+│  └─────────────────────────┬────────────────────────────────────────    │
+│                            │                                             │
+│                            ▼                                             │
+│  ╔═══════════════════════════════════════════════════════════════╗     │
+│  ║              DOMAIN LAYER (Pure Business Logic)               ║     │
+│  ║                                                               ║     │
+│  ║  ┌─────────────────────────────────────────────────┐         ║     │
+│  ║  │          USE CASES (Input Ports)                │         ║     │
+│  ║  │  ┌────────────────────────────────────────┐    │         ║     │
+│  ║  │  │  InitiateTransferUseCase               │    │         ║     │
+│  ║  │  │  QueryTransferUseCase                  │    │         ║     │
+│  ║  │  │  ControlTransferUseCase                │    │         ║     │
+│  ║  │  └────────────────────────────────────────┘    │         ║     │
+│  ║  └──────────────────┬──────────────────────────────┘         ║     │
+│  ║                     │                                         ║     │
+│  ║                     ▼                                         ║     │
+│  ║  ┌─────────────────────────────────────────────────┐         ║     │
+│  ║  │         DOMAIN SERVICES                         │         ║     │
+│  ║  │  ┌────────────────────────────────────────┐    │         ║     │
+│  ║  │  │  TransferService.java                  │    │         ║     │
+│  ║  │  │  ✓ Idempotency logic                   │    │         ║     │
+│  ║  │  │  ✓ Business validation                 │    │         ║     │
+│  ║  │  │  ✓ Transfer orchestration              │    │         ║     │
+│  ║  │  └────────────────────────────────────────┘    │         ║     │
+│  ║  │  ┌────────────────────────────────────────┐    │         ║     │
+│  ║  │  │  TransferControlService.java           │    │         ║     │
+│  ║  │  │  ✓ Pause/Resume logic                  │    │         ║     │
+│  ║  │  │  ✓ Cancel logic                        │    │         ║     │
+│  ║  │  └────────────────────────────────────────┘    │         ║     │
+│  ║  └──────────────────┬──────────────────────────────┘         ║     │
+│  ║                     │                                         ║     │
+│  ║                     ▼                                         ║     │
+│  ║  ┌─────────────────────────────────────────────────┐         ║     │
+│  ║  │         DOMAIN MODEL                            │         ║     │
+│  ║  │  ┌────────────────────────────────────────┐    │         ║     │
+│  ║  │  │  TransferDomain.java                   │    │         ║     │
+│  ║  │  │  ✓ Immutable                           │    │         ║     │
+│  ║  │  │  ✓ Self-validating                     │    │         ║     │
+│  ║  │  │  ✓ Business rules                      │    │         ║     │
+│  ║  │  │  ✓ No framework dependencies           │    │         ║     │
+│  ║  │  └────────────────────────────────────────┘    │         ║     │
+│  ║  └──────────────────┬──────────────────────────────┘         ║     │
+│  ║                     │                                         ║     │
+│  ║                     ▼                                         ║     │
+│  ║  ┌─────────────────────────────────────────────────┐         ║     │
+│  ║  │      OUTPUT PORTS (Dependencies)                │         ║     │
+│  ║  │  ┌────────────────────────────────────────┐    │         ║     │
+│  ║  │  │  TransferPersistencePort               │    │         ║     │
+│  ║  │  │  WorkflowOrchestrationPort             │    │         ║     │
+│  ║  │  │  AccountPort                           │    │         ║     │
+│  ║  │  │  ValidationPort                        │    │         ║     │
+│  ║  │  │  NotificationPort                      │    │         ║     │
+│  ║  │  └────────────────────────────────────────┘    │         ║     │
+│  ║  └─────────────────────────────────────────────────┘         ║     │
+│  ╚═══════════════════════════════════════════════════════════════╝     │
+│                            │                                             │
+│                            ▼                                             │
+│  ┌─────────────────────────────────────────────────────────────┐       │
+│  │                  DRIVEN ADAPTERS (OUT)                       │       │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐│       │
+│  │  │  Persistence   │  │  Workflow      │  │  External      ││       │
+│  │  │  Adapter       │  │  Adapter       │  │  Services      ││       │
+│  │  ├────────────────┤  ├────────────────┤  ├────────────────┤│       │
+│  │  │ JPA/Hibernate  │  │ Temporal SDK   │  │ Feign Clients  ││       │
+│  │  │ TransferMapper │  │ Async Exec     │  │ HTTP Calls     ││       │
+│  │  └────────────────┘  └────────────────┘  └────────────────┘│       │
+│  │  ┌────────────────┐                                         │       │
+│  │  │  Messaging     │                                         │       │
+│  │  │  Adapter       │                                         │       │
+│  │  ├────────────────┤                                         │       │
+│  │  │ Kafka Producer │                                         │       │
+│  │  └────────────────┘                                         │       │
+│  └─────────────────────────────────────────────────────────────┘       │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      EXTERNAL SYSTEMS                                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐               │
+│  │ Database │  │ Temporal │  │  Account │  │  Kafka   │               │
+│  │  Server  │  │  Server  │  │  Service │  │  Broker  │               │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Data Flow Example: Creating a Transfer with Idempotency
+
+```
+1. HTTP Request
+   ↓
+   POST /api/transfers { "sourceAccountNumber": "123",
+                         "destinationAccountNumber": "456",
+                         "amount": 100,
+                         "idempotencyKey": "abc-123" }
+   ↓
+2. TransferRestController (Infrastructure Layer)
+   ↓
+   Converts to → InitiateTransferCommand
+   ↓
+3. TransferService (Domain Layer)
+   ↓
+   Check idempotency → persistencePort.findByIdempotencyKey("abc-123")
+   ↓
+   If exists → Return existing transfer (IDEMPOTENT!)
+   If not → Create new transfer
+   ↓
+   Validate domain rules → transferDomain.validate()
+   ↓
+   Save → persistencePort.save(transferDomain)
+   ↓
+   Start workflow → orchestrationPort.startTransferWorkflow(...)
+   ↓
+4. Infrastructure Adapters Execute
+   ↓
+   ┌─────────────────────────────────────┐
+   │ TransferPersistenceAdapter          │ → Database (INSERT)
+   │ WorkflowOrchestrationAdapter        │ → Temporal (Start Workflow)
+   └─────────────────────────────────────┘
+   ↓
+5. Response
+   ↓
+   { "transferId": 1, "workflowId": "transfer-1", "status": "INITIATED" }
+```
+
+## Dependency Direction (Key Principle)
+
+```
+┌──────────────────────────────────────────────┐
+│                                              │
+│         ┌─────────────────────┐             │
+│         │   Infrastructure    │             │
+│         │     (Adapters)      │             │
+│         └──────────┬──────────┘             │
+│                    │                         │
+│                    │ Implements              │
+│                    │ (Depends on)            │
+│                    ▼                         │
+│         ┌─────────────────────┐             │
+│         │      Domain         │             │
+│         │   (Ports & Logic)   │             │
+│         └─────────────────────┘             │
+│                                              │
+│  Dependencies point INWARD                   │
+│  Domain has NO knowledge of infrastructure   │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+## Components Summary
+
+### Domain Layer (Pure Java - No Dependencies)
+- **TransferDomain**: Immutable model with business rules
+- **Use Case Interfaces**: What the application does
+- **Output Port Interfaces**: What the application needs
+- **Domain Services**: Business logic implementation
+
+### Infrastructure Layer (Framework-Specific)
+- **REST Controllers**: HTTP → Domain
+- **Persistence Adapters**: Domain → Database
+- **Workflow Adapters**: Domain → Temporal
+- **HTTP Adapters**: Domain → External Services
+- **Messaging Adapters**: Domain → Kafka
+
+## Key Benefits Visualized
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    TESTABILITY                             │
+│                                                            │
+│  Domain Service Tests                                     │
+│  ┌──────────────────────────────────────────────┐        │
+│  │ @Test                                        │        │
+│  │ void test() {                                │        │
+│  │   // NO @SpringBootTest needed!              │        │
+│  │   // NO database needed!                     │        │
+│  │   // NO Temporal needed!                     │        │
+│  │                                              │        │
+│  │   TransferService service =                  │        │
+│  │     new TransferService(                     │        │
+│  │       mock(TransferPersistencePort.class),   │        │
+│  │       mock(WorkflowOrchestrationPort.class)  │        │
+│  │     );                                       │        │
+│  │                                              │        │
+│  │   // Fast unit tests!                        │        │
+│  │ }                                            │        │
+│  └──────────────────────────────────────────────┘        │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│                    FLEXIBILITY                             │
+│                                                            │
+│  Want to switch from PostgreSQL to MongoDB?               │
+│  ┌──────────────────────────────────────────────┐        │
+│  │ Just create:                                 │        │
+│  │   MongoTransferPersistenceAdapter            │        │
+│  │                                              │        │
+│  │ Domain layer doesn't change!                 │        │
+│  │ Business logic unchanged!                    │        │
+│  └──────────────────────────────────────────────┘        │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│                    IDEMPOTENCY                             │
+│                                                            │
+│  Request 1: POST { idempotencyKey: "abc" }                │
+│  → Creates transfer ID=1                                   │
+│                                                            │
+│  Request 2: POST { idempotencyKey: "abc" } (duplicate!)   │
+│  → Returns transfer ID=1 (no duplicate!)                   │
+│                                                            │
+│  Database: Only ONE transfer with key "abc"               │
+└────────────────────────────────────────────────────────────┘
+```
