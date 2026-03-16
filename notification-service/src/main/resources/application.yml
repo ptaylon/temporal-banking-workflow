@@ -4,6 +4,18 @@ server:
 spring:
   application:
     name: notification-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/banking_demo
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
@@ -38,9 +50,3 @@ management:
   health:
     mail:
       enabled: false
-
-#temporal:
-#  service:
-#    host: temporal
-#    port: 7233
-#TEMPORAL_DEBUG: true

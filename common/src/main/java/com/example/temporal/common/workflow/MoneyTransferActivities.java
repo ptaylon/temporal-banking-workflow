@@ -1,6 +1,7 @@
 package com.example.temporal.common.workflow;
 
 import com.example.temporal.common.dto.TransferRequest;
+import com.example.temporal.common.model.TransferStatus;
 import io.temporal.activity.ActivityInterface;
 import io.temporal.activity.ActivityMethod;
 
@@ -40,9 +41,8 @@ public interface MoneyTransferActivities {
     void notifyTransferFailed(final Long transferId, final String reason);
 
     @ActivityMethod
-    void updateTransferStatus(final Long transferId, final String status);
+    void updateTransferStatus(final Long transferId, final TransferStatus status);
 
     @ActivityMethod
-    void updateTransferStatusWithReason(final Long transferId, final String status, final String reason);
-
+    void updateTransferStatusWithReason(final Long transferId, final TransferStatus status, final String reason);
 }

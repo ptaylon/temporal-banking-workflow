@@ -6,7 +6,7 @@ import com.example.temporal.common.model.TransferStatus;
 import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.transfer.client.AccountServiceClient;
 import com.example.temporal.transfer.client.ValidationServiceClient;
-import com.example.temporal.transfer.service.TransferPersistenceService;
+import com.example.temporal.transfer.domain.port.out.TransferPersistencePort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -23,7 +23,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     private final AccountServiceClient accountServiceClient;
     private final ValidationServiceClient validationServiceClient;
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final TransferPersistenceService transferPersistenceService;
+    private final TransferPersistencePort transferPersistencePort;
 
     // Constantes
     private static final String TRANSFER_EVENTS_TOPIC = "transfer-events";
@@ -217,17 +217,16 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     }
 
     @Override
-    public void updateTransferStatus(final Long transferId, final String status) {
+    public void updateTransferStatus(final Long transferId, final TransferStatus status) {
         if (transferId == null) {
             throw new IllegalArgumentException("Transfer ID cannot be null");
         }
-        if (status == null || status.trim().isEmpty()) {
-            throw new IllegalArgumentException("Status cannot be null or empty");
+        if (status == null) {
+            throw new IllegalArgumentException("Status cannot be null");
         }
         log.info("Updating transfer {} status to {}", transferId, status);
         try {
-            TransferStatus transferStatus = TransferStatus.valueOf(status);
-            transferPersistenceService.updateTransferStatus(transferId, transferStatus);
+            transferPersistencePort.updateTransferStatus(transferId, status);
         } catch (Exception e) {
             log.error("Error updating transfer status: {}", e.getMessage(), e);
             throw new RuntimeException(UPDATE_STATUS_FAILED_MSG, e);
@@ -235,11 +234,10 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     }
 
     @Override
-    public void updateTransferStatusWithReason(final Long transferId, final String status, final String reason) {
+    public void updateTransferStatusWithReason(final Long transferId, final TransferStatus status, final String reason) {
         log.info("Updating transfer {} status to {} with reason: {}", transferId, status, reason);
         try {
-            TransferStatus transferStatus = TransferStatus.valueOf(status);
-            transferPersistenceService.updateTransferStatus(transferId, transferStatus, reason);
+            transferPersistencePort.updateTransferStatusWithReason(transferId, status, reason);
         } catch (Exception e) {
             log.error("Error updating transfer status with reason: {}", e.getMessage(), e);
             throw new RuntimeException(UPDATE_STATUS_FAILED_MSG, e);

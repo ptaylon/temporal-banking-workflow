@@ -15,19 +15,21 @@ import java.util.List;
 public class AccountService {
     private final AccountRepository accountRepository;
 
-    @Transactional(readOnly = true)
-    public Account getAccount(String accountNumber) {
+    @Transactional
+    public Account getAccount(final String accountNumber) {
         return accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountNumber));
     }
 
     @Transactional
-    public Account createAccount(Account account) {
+    public Account createAccount(final Account account) {
         return accountRepository.save(account);
     }
 
     @Transactional
-    public void lockAccounts(String sourceAccountNumber, String destinationAccountNumber) {
+    public void lockAccounts(
+            final String sourceAccountNumber,
+            final String destinationAccountNumber) {
         accountRepository.findByAccountNumberWithLock(sourceAccountNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Source account not found: " + sourceAccountNumber));
         accountRepository.findByAccountNumberWithLock(destinationAccountNumber)
@@ -35,7 +37,7 @@ public class AccountService {
     }
 
     @Transactional
-    public void debitAccount(String accountNumber, BigDecimal amount) {
+    public void debitAccount(final String accountNumber, final BigDecimal amount) {
         Account account = accountRepository.findByAccountNumberWithLock(accountNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountNumber));
 
@@ -48,7 +50,7 @@ public class AccountService {
     }
 
     @Transactional
-    public void creditAccount(String accountNumber, BigDecimal amount) {
+    public void creditAccount(final String accountNumber, final BigDecimal amount) {
         Account account = accountRepository.findByAccountNumberWithLock(accountNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountNumber));
 
@@ -56,8 +58,8 @@ public class AccountService {
         accountRepository.save(account);
     }
 
-    @Transactional(readOnly = true)
-    public List<Account> getAccounts(List<String> accountNumbers) {
+    @Transactional
+    public List<Account> getAccounts(final List<String> accountNumbers) {
         return accountRepository.findByAccountNumberIn(accountNumbers);
     }
 }

@@ -20,4 +20,19 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     Optional<Account> findByAccountNumberWithLock(@Param("accountNumber") String accountNumber);
 
     List<Account> findByAccountNumberIn(List<String> accountNumbers);
+
+    /**
+     * Find account by idempotency key (for idempotent operations)
+     */
+    Optional<Account> findByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * Check if account exists with account number
+     */
+    boolean existsByAccountNumber(String accountNumber);
+
+    /**
+     * Check if account exists with idempotency key
+     */
+    boolean existsByIdempotencyKey(String idempotencyKey);
 }

@@ -22,4 +22,14 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     List<Transfer> findByAccountNumber(@Param("accountNumber") String accountNumber);
     
     Optional<Transfer> findByIdAndStatus(Long id, TransferStatus status);
+
+    /**
+     * Find transfer by idempotency key (for idempotent operations)
+     */
+    Optional<Transfer> findByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * Check if transfer exists with given idempotency key
+     */
+    boolean existsByIdempotencyKey(String idempotencyKey);
 }

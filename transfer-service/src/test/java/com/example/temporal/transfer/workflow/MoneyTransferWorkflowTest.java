@@ -86,12 +86,12 @@ public class MoneyTransferWorkflowTest {
         }
         
         @Override
-        public void updateTransferStatus(Long transferId, String status) {
+        public void updateTransferStatus(Long transferId, TransferStatus status) {
             delegate.updateTransferStatus(transferId, status);
         }
-        
+
         @Override
-        public void updateTransferStatusWithReason(Long transferId, String status, String reason) {
+        public void updateTransferStatusWithReason(Long transferId, TransferStatus status, String reason) {
             delegate.updateTransferStatusWithReason(transferId, status, reason);
         }
     }
@@ -195,7 +195,7 @@ public class MoneyTransferWorkflowTest {
         inOrder.verify(activities, atLeastOnce()).creditAccount(request.getDestinationAccountNumber(), request.getAmount());
         inOrder.verify(activities).compensateDebit(request.getSourceAccountNumber(), request.getAmount());
         inOrder.verify(activities).unlockAccounts(request.getSourceAccountNumber(), request.getDestinationAccountNumber());
-        inOrder.verify(activities).updateTransferStatusWithReason(any(), eq("FAILED"), anyString());
+        inOrder.verify(activities).updateTransferStatusWithReason(any(), eq(TransferStatus.FAILED), anyString());
         inOrder.verify(activities).notifyTransferFailed(any(), anyString());
         inOrder.verifyNoMoreInteractions();
     }
@@ -234,7 +234,7 @@ public class MoneyTransferWorkflowTest {
         verify(activities, never()).debitAccount(anyString(), any());
         verify(activities, never()).creditAccount(anyString(), any());
         verify(activities, never()).compensateDebit(anyString(), any());
-        verify(activities, never()).updateTransferStatusWithReason(any(), eq("CANCELLED"), anyString());
+        verify(activities, never()).updateTransferStatusWithReason(any(), eq(TransferStatus.CANCELLED), anyString());
         
         // Note: notifyTransferFailed with cancellation may not be called in test environment
         // because the signal processing happens asynchronously
@@ -273,7 +273,7 @@ public class MoneyTransferWorkflowTest {
         verify(activities, atLeastOnce()).creditAccount(request.getDestinationAccountNumber(), request.getAmount());
         
         // IMPORTANT: No updateTransferStatusWithReason should be called for cancellation
-        verify(activities, never()).updateTransferStatusWithReason(any(), eq("CANCELLED"), anyString());
+        verify(activities, never()).updateTransferStatusWithReason(any(), eq(TransferStatus.CANCELLED), anyString());
         
         // Note: Saga compensation and cancellation notifications may not be visible in test
         // environment due to asynchronous signal processing

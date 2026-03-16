@@ -24,4 +24,14 @@ public class TransferRequest {
 
     // ID da transferência (opcional - usado internamente)
     private Long transferId;
+
+    // Idempotency key for ensuring request is processed only once
+    private String idempotencyKey;
+
+    // Timer configurations for delayed execution
+    private Long delayInSeconds; // Delay before starting the transfer
+    
+    private Long timeoutInSeconds; // Timeout for the entire transfer
+    
+    private boolean allowCancelDuringDelay = true; // Can cancel during delay period?
 }

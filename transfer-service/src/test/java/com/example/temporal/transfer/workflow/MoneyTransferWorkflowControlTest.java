@@ -213,12 +213,12 @@ public class MoneyTransferWorkflowControlTest {
         }
         
         @Override
-        public void updateTransferStatus(Long transferId, String status) {
+        public void updateTransferStatus(Long transferId, com.example.temporal.common.model.TransferStatus status) {
             // Implementação vazia para teste
         }
-        
+
         @Override
-        public void updateTransferStatusWithReason(Long transferId, String status, String reason) {
+        public void updateTransferStatusWithReason(Long transferId, com.example.temporal.common.model.TransferStatus status, String reason) {
             // Implementação vazia para teste
         }
     }

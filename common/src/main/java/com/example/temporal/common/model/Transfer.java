@@ -35,6 +35,9 @@ public class Transfer {
     @Column(length = 255)
     private String failureReason;
 
+    @Column(unique = true, length = 100)
+    private String idempotencyKey;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

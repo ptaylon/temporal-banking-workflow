@@ -2,136 +2,210 @@ package com.example.temporal.transfer.workflow;
 
 import com.example.temporal.common.dto.TransferRequest;
 import com.example.temporal.common.dto.TransferResponse;
-import com.example.temporal.common.dto.TransferControlStatus;
-import com.example.temporal.common.dto.TransferControlAction;
 import com.example.temporal.common.model.TransferStatus;
 import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.common.workflow.MoneyTransferWorkflow;
-import com.example.temporal.common.exception.ValidationException;
 import io.temporal.failure.ActivityFailure;
-import io.temporal.activity.ActivityOptions;
-import io.temporal.common.RetryOptions;
-import io.temporal.failure.CanceledFailure;
 import io.temporal.workflow.CancellationScope;
+import io.temporal.workflow.Promise;
 import io.temporal.workflow.Saga;
 import io.temporal.workflow.Workflow;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.Random;
+
+/**
+ * Money Transfer Workflow implementation using Temporal.
+ * <p>
+ * Orchestrates the transfer process with:
+ * - Configurable delays between steps
+ * - Pause/Resume/Cancel support via signals
+ * - Saga pattern for compensation on failure
+ * - Search attributes for visibility
+ * </p>
+ */
 public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
+    // ========== Configuration Constants ==========
+    private static final Duration DEFAULT_STEP_DELAY = Duration.ofSeconds(20);
+
+    // ========== Workflow State ==========
     private TransferResponse currentResponse;
-    
-    // Campos de controle para signals e queries
-    private boolean paused = false;
-    private boolean cancelled = false;
-    private String pauseReason;
-    private String cancelReason;
-    private TransferControlAction lastControlAction;
-    private LocalDateTime lastControlTimestamp;
-    
-    // CancellationScope para cancelamento elegante
+    private final TransferControlState controlState;
+    private final SearchAttributesManager searchAttributesManager;
+
+    // ========== Cancellation Scopes ==========
     private CancellationScope mainScope;
+    private CancellationScope delayScope;
 
-    // Configuração de delays por step (configurável via Search Attributes/Headers futuramente)
-    // Por ora, default 20s conforme solicitado
-    private Duration initDelay = Duration.ofSeconds(20);
-    private Duration validateDelay = Duration.ofSeconds(20);
-    private Duration accountsDelay = Duration.ofSeconds(20);
-    private Duration completeDelay = Duration.ofSeconds(20);
-
-    // Activity stubs with specific configurations
-    private final MoneyTransferActivities validationActivities = Workflow.newActivityStub(MoneyTransferActivities.class,
-            createValidationActivityOptions());
-
-    private final MoneyTransferActivities accountActivities = Workflow.newActivityStub(MoneyTransferActivities.class,
-            createAccountActivityOptions());
-
-    private final MoneyTransferActivities notificationActivities = Workflow
-            .newActivityStub(MoneyTransferActivities.class, createNotificationActivityOptions());
-
-    private final MoneyTransferActivities persistenceActivities = Workflow
-            .newActivityStub(MoneyTransferActivities.class, createPersistenceActivityOptions());
+    // ========== Activity Stubs ==========
+    private final MoneyTransferActivities validationActivities;
+    private final MoneyTransferActivities accountActivities;
+    private final MoneyTransferActivities notificationActivities;
+    private final MoneyTransferActivities persistenceActivities;
 
     /**
-     * Creates activity options for validation operations with extended retry policy
+     * Constructs the workflow with all dependencies initialized.
      */
-    private ActivityOptions createValidationActivityOptions() {
-        return ActivityOptions.newBuilder()
-                // Aumentado para evitar timeouts em cenários de latência elevada.
-                // Maior que 1h conforme solicitado.
-                .setStartToCloseTimeout(Duration.ofHours(2))
-                .setRetryOptions(RetryOptions.newBuilder()
-                        .setInitialInterval(Duration.ofSeconds(2))
-                        .setMaximumInterval(Duration.ofMinutes(5))
-                        .setBackoffCoefficient(2.0)
-                        .setMaximumAttempts(20) // Extended retries for connectivity issues
-                        .setDoNotRetry(ValidationException.class.getName())
-                        .build())
-                .build();
+    public MoneyTransferWorkflowImpl() {
+        this.controlState = new TransferControlState();
+        this.searchAttributesManager = new SearchAttributesManager(Workflow.getInfo().getNamespace());
+
+        // Initialize activity stubs with specific configurations
+        this.validationActivities = Workflow.newActivityStub(
+                MoneyTransferActivities.class,
+                ActivityConfiguration.createValidationOptions());
+
+        this.accountActivities = Workflow.newActivityStub(
+                MoneyTransferActivities.class,
+                ActivityConfiguration.createAccountOptions());
+
+        this.notificationActivities = Workflow.newActivityStub(
+                MoneyTransferActivities.class,
+                ActivityConfiguration.createNotificationOptions());
+
+        this.persistenceActivities = Workflow.newActivityStub(
+                MoneyTransferActivities.class,
+                ActivityConfiguration.createPersistenceOptions());
     }
 
-    /**
-     * Creates activity options for account operations with moderate retry policy
-     */
-    private ActivityOptions createAccountActivityOptions() {
-        return ActivityOptions.newBuilder()
-                // Aumentado para evitar timeouts; maior que 1h conforme solicitado.
-                .setStartToCloseTimeout(Duration.ofHours(2))
-                .setRetryOptions(RetryOptions.newBuilder()
-                        .setInitialInterval(Duration.ofSeconds(1))
-                        .setMaximumInterval(Duration.ofMinutes(2))
-                        .setBackoffCoefficient(2.0)
-                        .setMaximumAttempts(15) // Critical banking operations
-                        .build())
-                .build();
-    }
-
-    /**
-     * Creates activity options for notification operations with quick retry policy
-     */
-    private ActivityOptions createNotificationActivityOptions() {
-        return ActivityOptions.newBuilder()
-                .setStartToCloseTimeout(Duration.ofSeconds(10))
-                .setRetryOptions(RetryOptions.newBuilder()
-                        .setInitialInterval(Duration.ofSeconds(1))
-                        .setMaximumInterval(Duration.ofSeconds(30))
-                        .setBackoffCoefficient(2.0)
-                        .setMaximumAttempts(10)
-                        .build())
-                .build();
-    }
-
-    /**
-     * Creates activity options for persistence operations with extended retry
-     * policy
-     */
-    private ActivityOptions createPersistenceActivityOptions() {
-        return ActivityOptions.newBuilder()
-                .setStartToCloseTimeout(Duration.ofSeconds(10))
-                .setRetryOptions(RetryOptions.newBuilder()
-                        .setInitialInterval(Duration.ofSeconds(1))
-                        .setMaximumInterval(Duration.ofSeconds(10))
-                        .setBackoffCoefficient(2.0)
-                        .setMaximumAttempts(15) // Important for data consistency
-                        .build())
-                .build();
-    }
+    // ========== Main Workflow Entry Point ==========
 
     @Override
-    public TransferResponse executeTransfer(TransferRequest transferRequest) {
-        Long transferId = generateTransferId(transferRequest);
-        Saga saga = createSaga();
+    public TransferResponse executeTransfer(final TransferRequest request) {
+        final Long transferId = generateTransferId(request);
+        final Saga saga = createSaga();
 
-        initializeTransferResponse(transferRequest, transferId);
+        initializeWorkflow(request, transferId);
 
-        // Criar CancellationScope principal para todo o workflow
+        // Handle pre-execution delay if configured
+        if (hasConfigurableDelay(request)) {
+            executeConfigurableDelay(request, transferId);
+        }
+
+        // Check if cancelled during delay
+        if (controlState.isCancelled()) {
+            return cancelDuringDelay(transferId);
+        }
+
+        // Execute main transfer logic with cancellation support
+        return executeWithCancellationSupport(request, saga, transferId);
+    }
+
+    // ========== Workflow Initialization ==========
+
+    /**
+     * Initializes workflow state and search attributes.
+     */
+    private void initializeWorkflow(final TransferRequest request, final Long transferId) {
+        currentResponse = buildInitialResponse(request, transferId);
+        searchAttributesManager.upsertInitialAttributes(request, transferId);
+    }
+
+    /**
+     * Builds initial transfer response.
+     */
+    private TransferResponse buildInitialResponse(final TransferRequest request, final Long transferId) {
+        return new TransferResponse()
+                .setTransferId(transferId)
+                .setSourceAccountNumber(request.getSourceAccountNumber())
+                .setDestinationAccountNumber(request.getDestinationAccountNumber())
+                .setAmount(request.getAmount())
+                .setCurrency(request.getCurrency())
+                .setStatus(TransferStatus.INITIATED);
+    }
+
+    /**
+     * Checks if request has configurable delay.
+     */
+    private boolean hasConfigurableDelay(final TransferRequest request) {
+        return request.getDelayInSeconds() != null && request.getDelayInSeconds() > 0;
+    }
+
+    // ========== Delay Handling ==========
+
+    /**
+     * Executes configurable delay with cancellation support.
+     */
+    private void executeConfigurableDelay(final TransferRequest request, final Long transferId) {
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Starting configurable delay: {} seconds for transfer {}",
+                        request.getDelayInSeconds(), transferId);
+
+        final Duration delay = Duration.ofSeconds(request.getDelayInSeconds());
+
+        delayScope = Workflow.newCancellationScope(() -> {
+            executeDelayLogic(request, delay, transferId);
+        });
+
+        delayScope.run();
+    }
+
+    /**
+     * Internal delay logic with cancellation check.
+     */
+    private void executeDelayLogic(final TransferRequest request, final Duration delay, final Long transferId) {
+        try {
+            if (request.isAllowCancelDuringDelay()) {
+                waitForDelayOrCancellation(delay, transferId);
+            } else {
+                Workflow.sleep(delay);
+            }
+
+            if (!controlState.isDelayCancelled()) {
+                controlState.markDelayCompleted();
+            }
+
+        } catch (final Exception e) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .warn("Delay interrupted for transfer {}: {}", transferId, e.getMessage());
+            controlState.markDelayCancelled();
+        }
+    }
+
+    /**
+     * Waits for either delay completion or cancellation signal.
+     */
+    private void waitForDelayOrCancellation(final Duration delay, final Long transferId) {
+        final Promise<Void> timerPromise = Workflow.newTimer(delay);
+        Promise.anyOf(timerPromise, Workflow.newPromise(controlState.isCancelled())).get();
+
+        if (controlState.isCancelled()) {
+            controlState.markDelayCancelled();
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Transfer {} cancelled during delay period", transferId);
+        } else {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Delay completed for transfer {}", transferId);
+        }
+    }
+
+    /**
+     * Handles cancellation during delay period.
+     */
+    private TransferResponse cancelDuringDelay(final Long transferId) {
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer cancelled during delay period. WorkflowId: {}",
+                        Workflow.getInfo().getWorkflowId());
+
+        currentResponse.setStatus(TransferStatus.CANCELLED);
+        return currentResponse;
+    }
+
+    // ========== Main Execution with Cancellation ==========
+
+    /**
+     * Executes transfer with cancellation scope support.
+     */
+    private TransferResponse executeWithCancellationSupport(
+            final TransferRequest request,
+            final Saga saga,
+            final Long transferId) {
+
         mainScope = Workflow.newCancellationScope(() -> {
             try {
-                // Aguardar se pausado é verificado automaticamente em cada step
-                executeTransferSteps(transferRequest, saga, transferId);
-            } catch (ActivityFailure e) {
+                executeTransferSteps(request, saga, transferId);
+            } catch (final ActivityFailure e) {
                 handleTransferFailure(transferId, e);
                 throw e;
             }
@@ -139,244 +213,229 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
 
         try {
             mainScope.run();
-        } catch (CanceledFailure e) {
-            // Cancelamento foi propagado automaticamente
-            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                    .info("Transfer workflow cancelled: {}. Executing rollback via Saga. WorkflowId: {}", 
-                          e.getMessage(), Workflow.getInfo().getWorkflowId());
-            
-            // Executar rollback em um escopo desanexado para não herdar o cancelamento
-            CancellationScope nonCancellable = Workflow.newDetachedCancellationScope(() -> {
-                try {
-                    currentResponse.setStatus(TransferStatus.COMPENSATING);
-                    saga.compensate();
-                    Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                            .info("Saga rollback completed successfully. Transfer cancelled cleanly. WorkflowId: {}", 
-                                  Workflow.getInfo().getWorkflowId());
-                } catch (Exception sagaException) {
-                    Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                            .error("Error during Saga rollback: {}. WorkflowId: {}", 
-                                   sagaException.getMessage(), Workflow.getInfo().getWorkflowId());
-                }
-            });
-            nonCancellable.run();
-            
-            // Atualizar apenas status local (sem activities após cancelamento)
-            currentResponse.setStatus(TransferStatus.CANCELLED);
-            
-            // Retornar resposta com status cancelado em vez de re-throw
             return currentResponse;
-        }
 
+        } catch (final io.temporal.failure.CanceledFailure e) {
+            return handleWorkflowCancellation(saga, transferId, e);
+        }
+    }
+
+    /**
+     * Handles workflow cancellation with saga compensation.
+     */
+    private TransferResponse handleWorkflowCancellation(
+            final Saga saga,
+            final Long transferId,
+            final io.temporal.failure.CanceledFailure e) {
+
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer workflow cancelled: {}. Executing rollback via Saga. WorkflowId: {}",
+                        e.getMessage(), Workflow.getInfo().getWorkflowId());
+
+        // Execute compensation in detached scope
+        executeCompensation(saga, transferId);
+
+        currentResponse.setStatus(TransferStatus.CANCELLED);
         return currentResponse;
     }
 
     /**
-     * Executa os steps da transferência com pause/resume elegante
+     * Executes saga compensation in detached scope.
      */
-    private void executeTransferSteps(TransferRequest transferRequest, Saga saga, Long transferId) {
+    private void executeCompensation(final Saga saga, final Long transferId) {
+        final CancellationScope nonCancellable = Workflow.newDetachedCancellationScope(() -> {
+            try {
+                currentResponse.setStatus(TransferStatus.COMPENSATING);
+                saga.compensate();
+
+                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                        .info("Saga rollback completed successfully. Transfer cancelled cleanly. WorkflowId: {}",
+                                Workflow.getInfo().getWorkflowId());
+
+            } catch (final Exception sagaException) {
+                Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                        .error("Error during Saga rollback: {}. WorkflowId: {}",
+                                sagaException.getMessage(), Workflow.getInfo().getWorkflowId());
+            }
+        });
+
+        nonCancellable.run();
+    }
+
+    // ========== Transfer Steps Execution ==========
+
+    /**
+     * Executes all transfer steps with pause support.
+     */
+    private void executeTransferSteps(final TransferRequest request, final Saga saga, final Long transferId) {
         // Step 1: Initialize
         executeStepWithPauseCheck(() -> {
-            sleepIfConfigured(initDelay);
+            sleepIfConfigured(DEFAULT_STEP_DELAY);
             initializeTransfer(transferId);
         });
-        
+
         // Step 2: Validate
         executeStepWithPauseCheck(() -> {
-            sleepIfConfigured(validateDelay);
-            validateTransfer(transferRequest, transferId);
+            sleepIfConfigured(DEFAULT_STEP_DELAY);
+            validateTransfer(request, transferId);
         });
-        
+
         // Step 3: Account Operations
         executeStepWithPauseCheck(() -> {
-            sleepIfConfigured(accountsDelay);
-            executeAccountOperations(transferRequest, saga, transferId);
+            sleepIfConfigured(DEFAULT_STEP_DELAY);
+            executeAccountOperations(request, saga, transferId);
         });
-        
+
         // Step 4: Complete
         executeStepWithPauseCheck(() -> {
-            sleepIfConfigured(completeDelay);
+            sleepIfConfigured(DEFAULT_STEP_DELAY);
             completeTransfer(transferId);
         });
     }
-    
+
     /**
-     * Executa um step verificando pause de forma elegante
+     * Executes a step after waiting for pause condition.
      */
-    private void executeStepWithPauseCheck(Runnable step) {
-        // Aguardar se pausado antes de executar o step
-        if (paused) {
-            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                    .info("Transfer paused, waiting for resume signal. WorkflowId: {}", 
-                          Workflow.getInfo().getWorkflowId());
-        }
-        Workflow.await(() -> !paused);
-        
-        // Executar o step
+    private void executeStepWithPauseCheck(final Runnable step) {
+        waitForResume();
         step.run();
     }
 
     /**
-     * Aplica um sleep Workflow-side configurável entre os steps.
-     * Usa Workflow.sleep para ser determinístico e respeitar o relógio virtual.
+     * Waits until workflow is not paused.
      */
-    private void sleepIfConfigured(Duration d) {
-        if (d != null && !d.isZero() && !d.isNegative()) {
-            Workflow.sleep(d);
+    private void waitForResume() {
+        if (controlState.isPaused()) {
+            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                    .info("Transfer paused, waiting for resume signal. WorkflowId: {}",
+                            Workflow.getInfo().getWorkflowId());
+        }
+        Workflow.await(() -> !controlState.isPaused());
+    }
+
+    /**
+     * Applies sleep if delay is configured.
+     */
+    private void sleepIfConfigured(final Duration delay) {
+        if (delay != null && !delay.isZero() && !delay.isNegative()) {
+            Workflow.sleep(delay);
         }
     }
 
-    /**
-     * Generates a transfer ID from request or creates a new random one
-     */
-    private Long generateTransferId(TransferRequest transferRequest) {
-        return transferRequest.getTransferId() != null ? transferRequest.getTransferId() : new Random().nextLong();
-    }
+    // ========== Individual Step Implementations ==========
 
     /**
-     * Creates a Saga instance for compensation management
+     * Step 1: Initialize transfer.
      */
-    private Saga createSaga() {
-        return new Saga(new Saga.Options.Builder()
-                .setParallelCompensation(false)
-                .build());
-    }
-
-    /**
-     * Initializes the transfer response object
-     */
-    private void initializeTransferResponse(TransferRequest transferRequest, Long transferId) {
-        currentResponse = new TransferResponse()
-                .setTransferId(transferId)
-                .setSourceAccountNumber(transferRequest.getSourceAccountNumber())
-                .setDestinationAccountNumber(transferRequest.getDestinationAccountNumber())
-                .setAmount(transferRequest.getAmount())
-                .setCurrency(transferRequest.getCurrency())
-                .setStatus(TransferStatus.INITIATED);
-    }
-
-    /**
-     * Sets initial transfer status and sends notifications
-     */
-    private void initializeTransfer(Long transferId) {
+    private void initializeTransfer(final Long transferId) {
         currentResponse.setStatus(TransferStatus.INITIATED);
-        persistenceActivities.updateTransferStatus(transferId, TransferStatus.INITIATED.name());
+        searchAttributesManager.updateStatusAttribute(TransferStatus.INITIATED);
+        persistenceActivities.updateTransferStatus(transferId, TransferStatus.INITIATED);
         notificationActivities.notifyTransferInitiated(transferId);
     }
 
     /**
-     * Validates the transfer request with enhanced error handling
+     * Step 2: Validate transfer request.
      */
-    private void validateTransfer(TransferRequest transferRequest, Long transferId) {
-        try {
-            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                    .info("Starting validation for transfer ID: {} - Will retry up to 20 times for connectivity issues",
-                            transferId);
-
-            validationActivities.validateTransfer(transferRequest);
-
-            currentResponse.setStatus(TransferStatus.VALIDATED);
-            persistenceActivities.updateTransferStatus(transferId, TransferStatus.VALIDATED.name());
-
-            Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                    .info("Transfer validation successful for ID: {}", transferId);
-
-        } catch (ActivityFailure e) {
-            handleValidationFailure(transferId, e);
-            throw e;
-        }
-    }
-
-    /**
-     * Handles validation failure with proper logging and status updates
-     */
-    private void handleValidationFailure(Long transferId, ActivityFailure e) {
+    private void validateTransfer(final TransferRequest request, final Long transferId) {
         Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                .error("Transfer validation failed permanently for ID: {} after all retries. Error: {}", transferId, e.getMessage());
+                .info("Starting validation for transfer ID: {} - Will retry up to 20 times for connectivity issues",
+                        transferId);
+
+        validationActivities.validateTransfer(request);
+
+        currentResponse.setStatus(TransferStatus.VALIDATED);
+        searchAttributesManager.updateStatusAttribute(TransferStatus.VALIDATED);
+        persistenceActivities.updateTransferStatus(transferId, TransferStatus.VALIDATED);
+
+        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
+                .info("Transfer validation successful for ID: {}", transferId);
     }
 
     /**
-     * Handles transfer failure and updates status
+     * Step 3: Execute account operations (lock, debit, credit).
      */
-    private void handleTransferFailure(Long transferId, ActivityFailure e) {
-        currentResponse.setStatus(TransferStatus.FAILED);
-        String truncatedError = truncateErrorMessage(e.getMessage());
-        persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED.name(), truncatedError);
-        notificationActivities.notifyTransferFailed(transferId, truncatedError);
-    }
-
-
-    /**
-     * Executes account operations (lock, debit, credit) with saga compensation
-     */
-    private void executeAccountOperations(TransferRequest transferRequest, Saga saga, Long transferId) {
-        // Sub-steps com pause check elegante - cancelamento já é tratado pelo mainScope
-        executeStepWithPauseCheck(() -> lockAccountsWithCompensation(transferRequest, saga));
-        executeStepWithPauseCheck(() -> debitAccountWithCompensation(transferRequest, saga));
-        executeStepWithPauseCheck(() -> creditAccountWithCompensation(transferRequest, saga, transferId));
+    private void executeAccountOperations(final TransferRequest request, final Saga saga, final Long transferId) {
+        lockAccountsWithCompensation(request, saga);
+        debitAccountWithCompensation(request, saga);
+        creditAccountWithCompensation(request, saga, transferId);
     }
 
     /**
-     * Locks accounts and registers compensation
+     * Locks accounts and registers compensation.
      */
-    private void lockAccountsWithCompensation(TransferRequest transferRequest, Saga saga) {
+    private void lockAccountsWithCompensation(final TransferRequest request, final Saga saga) {
         accountActivities.lockAccounts(
-                transferRequest.getSourceAccountNumber(),
-                transferRequest.getDestinationAccountNumber());
-        saga.addCompensation(accountActivities::unlockAccounts,
-                transferRequest.getSourceAccountNumber(),
-                transferRequest.getDestinationAccountNumber());
+                request.getSourceAccountNumber(),
+                request.getDestinationAccountNumber());
+
+        saga.addCompensation(
+                accountActivities::unlockAccounts,
+                request.getSourceAccountNumber(),
+                request.getDestinationAccountNumber());
     }
 
     /**
-     * Debits source account and registers compensation
+     * Debits source account and registers compensation.
      */
-    private void debitAccountWithCompensation(TransferRequest transferRequest, Saga saga) {
+    private void debitAccountWithCompensation(final TransferRequest request, final Saga saga) {
         accountActivities.debitAccount(
-                transferRequest.getSourceAccountNumber(),
-                transferRequest.getAmount());
-        saga.addCompensation(accountActivities::compensateDebit,
-                transferRequest.getSourceAccountNumber(),
-                transferRequest.getAmount());
+                request.getSourceAccountNumber(),
+                request.getAmount());
+
+        saga.addCompensation(
+                accountActivities::compensateDebit,
+                request.getSourceAccountNumber(),
+                request.getAmount());
     }
 
     /**
-     * Credits destination account with error handling and compensation
+     * Credits destination account with error handling.
      */
-    private void creditAccountWithCompensation(TransferRequest transferRequest, Saga saga, Long transferId) {
+    private void creditAccountWithCompensation(
+            final TransferRequest request,
+            final Saga saga,
+            final Long transferId) {
+
         try {
             accountActivities.creditAccount(
-                    transferRequest.getDestinationAccountNumber(),
-                    transferRequest.getAmount());
-            // Only add compensation AFTER successful credit
-            saga.addCompensation(accountActivities::compensateCredit,
-                    transferRequest.getDestinationAccountNumber(),
-                    transferRequest.getAmount());
-        } catch (ActivityFailure e) {
+                    request.getDestinationAccountNumber(),
+                    request.getAmount());
+
+            saga.addCompensation(
+                    accountActivities::compensateCredit,
+                    request.getDestinationAccountNumber(),
+                    request.getAmount());
+
+        } catch (final ActivityFailure e) {
             handleCreditFailureWithCompensation(saga, transferId, e);
             throw e;
         }
     }
 
     /**
-     * Handles credit failure by executing compensation
+     * Handles credit failure with compensation.
      */
-    private void handleCreditFailureWithCompensation(Saga saga, Long transferId, ActivityFailure e) {
+    private void handleCreditFailureWithCompensation(
+            final Saga saga,
+            final Long transferId,
+            final ActivityFailure e) {
+
         Workflow.getLogger(MoneyTransferWorkflowImpl.class)
                 .warn("Credit account failed for transfer ID: {}, starting compensation. Error: {}",
                         transferId, e.getMessage());
 
         currentResponse.setStatus(TransferStatus.COMPENSATING);
         currentResponse.setFailureReason(e.getMessage());
-        persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATING.name(),
-                e.getMessage());
+        persistenceActivities.updateTransferStatusWithReason(
+                transferId, TransferStatus.COMPENSATING, e.getMessage());
 
-        // Execute compensation (debit + unlock only, no credit to compensate)
         saga.compensate();
 
         currentResponse.setStatus(TransferStatus.COMPENSATED);
-        persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.COMPENSATED.name(),
-                e.getMessage());
+        persistenceActivities.updateTransferStatusWithReason(
+                transferId, TransferStatus.COMPENSATED, e.getMessage());
+
         notificationActivities.notifyTransferFailed(transferId, e.getMessage());
 
         Workflow.getLogger(MoneyTransferWorkflowImpl.class)
@@ -384,114 +443,116 @@ public class MoneyTransferWorkflowImpl implements MoneyTransferWorkflow {
     }
 
     /**
-     * Completes the transfer with success status and notifications
+     * Step 4: Complete transfer.
      */
-    private void completeTransfer(Long transferId) {
+    private void completeTransfer(final Long transferId) {
         currentResponse.setStatus(TransferStatus.COMPLETED);
-        persistenceActivities.updateTransferStatus(transferId, TransferStatus.COMPLETED.name());
+        searchAttributesManager.updateStatusAttribute(TransferStatus.COMPLETED);
+        persistenceActivities.updateTransferStatus(transferId, TransferStatus.COMPLETED);
         notificationActivities.notifyTransferCompleted(transferId);
     }
 
+    // ========== Failure Handling ==========
 
     /**
-     * Truncates error messages to prevent database field overflow
+     * Handles transfer failure.
      */
-    private String truncateErrorMessage(String errorMessage) {
+    private void handleTransferFailure(final Long transferId, final ActivityFailure e) {
+        currentResponse.setStatus(TransferStatus.FAILED);
+        final String truncatedError = truncateErrorMessage(e.getMessage());
+        persistenceActivities.updateTransferStatusWithReason(transferId, TransferStatus.FAILED, truncatedError);
+        notificationActivities.notifyTransferFailed(transferId, truncatedError);
+    }
+
+    /**
+     * Truncates error messages to prevent database overflow.
+     */
+    private String truncateErrorMessage(final String errorMessage) {
+        if (errorMessage == null) {
+            return "";
+        }
         return errorMessage.length() > 200 ? errorMessage.substring(0, 200) + "..." : errorMessage;
     }
 
+    // ========== Utility Methods ==========
 
+    /**
+     * Generates transfer ID from request or creates random one.
+     */
+    private Long generateTransferId(final TransferRequest request) {
+        return request.getTransferId() != null ? request.getTransferId() : new Random().nextLong();
+    }
+
+    /**
+     * Creates Saga instance for compensation management.
+     */
+    private Saga createSaga() {
+        return new Saga(new Saga.Options.Builder()
+                .setParallelCompensation(false)
+                .build());
+    }
+
+    // ========== Query Methods ==========
 
     @Override
     public TransferResponse getStatus() {
         return currentResponse;
     }
 
-    // Signal Methods para controle de transferência
+    @Override
+    public boolean isPaused() {
+        return controlState.isPaused();
+    }
+
+    @Override
+    public com.example.temporal.common.dto.TransferControlStatus getControlStatus() {
+        final var status = new com.example.temporal.common.dto.TransferControlStatus();
+        status.setPaused(controlState.isPaused());
+        status.setCancelled(controlState.isCancelled());
+        status.setPauseReason(controlState.getPauseReason());
+        status.setCancelReason(controlState.getCancelReason());
+        status.setLastControlAction(controlState.getLastControlAction());
+        status.setLastControlTimestamp(controlState.getLastControlTimestamp());
+        status.setWorkflowStatus(currentResponse != null ? currentResponse.getStatus().name() : "UNKNOWN");
+        return status;
+    }
+
+    // ========== Signal Methods ==========
+
     @Override
     public void pauseTransfer() {
-        // Verificar se a funcionalidade está habilitada via side effect
-        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> {
-            // Em um cenário real, isso viria de uma configuração externa
-            // Por enquanto, assumimos que está habilitado
-            return true;
-        });
-        
-        if (!controlEnabled) {
+        if (!isControlEnabled()) {
             Workflow.getLogger(MoneyTransferWorkflowImpl.class)
                     .warn("Pause functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
             return;
         }
-        
-        this.paused = true;
-        this.lastControlAction = TransferControlAction.PAUSE;
-        this.lastControlTimestamp = LocalDateTime.now();
-        
-        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                .info("Transfer paused via signal. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+        controlState.pause(null);
     }
 
     @Override
     public void resumeTransfer() {
-        // Verificar se a funcionalidade está habilitada
-        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> true);
-        
-        if (!controlEnabled) {
+        if (!isControlEnabled()) {
             Workflow.getLogger(MoneyTransferWorkflowImpl.class)
                     .warn("Resume functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
             return;
         }
-        
-        this.paused = false;
-        this.pauseReason = null;
-        this.lastControlAction = TransferControlAction.RESUME;
-        this.lastControlTimestamp = LocalDateTime.now();
-        
-        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                .info("Transfer resumed via signal. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
+        controlState.resume();
     }
 
     @Override
-    public void cancelTransfer(String reason) {
-        // Verificar se a funcionalidade está habilitada
-        boolean controlEnabled = Workflow.sideEffect(Boolean.class, () -> true);
-        
-        if (!controlEnabled) {
+    public void cancelTransfer(final String reason) {
+        if (!isControlEnabled()) {
             Workflow.getLogger(MoneyTransferWorkflowImpl.class)
                     .warn("Cancel functionality is disabled. WorkflowId: {}", Workflow.getInfo().getWorkflowId());
             return;
         }
-        
-        this.cancelled = true;
-        this.cancelReason = reason;
-        this.lastControlAction = TransferControlAction.CANCEL;
-        this.lastControlTimestamp = LocalDateTime.now();
-        
-        // Cancelar o scope atual - isso propagará automaticamente para todas as activities
-        if (mainScope != null) {
-            mainScope.cancel();
-        }
-        
-        Workflow.getLogger(MoneyTransferWorkflowImpl.class)
-                .info("Transfer cancelled via signal. Reason: {}. WorkflowId: {}", 
-                      reason, Workflow.getInfo().getWorkflowId());
+        controlState.cancel(reason != null ? reason : "Cancelled by user request");
     }
 
-    // Query Methods para status de controle
-    @Override
-    public boolean isPaused() {
-        return paused;
-    }
-
-    @Override
-    public TransferControlStatus getControlStatus() {
-        return new TransferControlStatus()
-                .setPaused(paused)
-                .setCancelled(cancelled)
-                .setPauseReason(pauseReason)
-                .setCancelReason(cancelReason)
-                .setLastControlAction(lastControlAction)
-                .setLastControlTimestamp(lastControlTimestamp)
-                .setWorkflowStatus(currentResponse != null ? currentResponse.getStatus().name() : "UNKNOWN");
+    /**
+     * Checks if control functionality is enabled.
+     */
+    private boolean isControlEnabled() {
+        return Workflow.sideEffect(Boolean.class, () -> true);
     }
 }

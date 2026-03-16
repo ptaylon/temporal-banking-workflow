@@ -28,6 +28,9 @@ public class Account {
     @Column(nullable = false)
     private String currency;
 
+    @Column(unique = true, length = 100)
+    private String idempotencyKey;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
