@@ -8,6 +8,21 @@
 
 Complete banking system demonstrating Temporal.io usage for money transfer orchestration with microservices architecture, implementing distributed saga patterns, Change Data Capture (CDC), and real-time comprehensive auditing.
 
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[GETTING_STARTED.md](GETTING_STARTED.md)** | Complete setup, installation, and usage guide |
+| **[API_EXAMPLES.md](API_EXAMPLES.md)** | All API endpoints with ready-to-use examples |
+| **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | Quick reference card for common commands |
+| [docs/](docs/) | Technical architecture and design documents |
+
+**👉 New to the project? Start with [GETTING_STARTED.md](GETTING_STARTED.md)**
+
+---
+
 ## 🎯 What's New in Version 2.0
 
 ### ✨ Major Features
@@ -114,6 +129,8 @@ make -f Makefile.dev dev-start
 make debug-all
 ```
 
+> **📖 For detailed instructions, see [GETTING_STARTED.md](GETTING_STARTED.md)**
+
 ### Manual Start
 
 ```bash
@@ -140,6 +157,8 @@ java -jar audit-service/target/audit-service-1.0-SNAPSHOT.jar
 ---
 
 ## 📋 API Usage Guide
+
+> **📖 For complete API documentation with all endpoints and examples, see [API_EXAMPLES.md](API_EXAMPLES.md)**
 
 ### 1. Create Accounts
 
@@ -517,6 +536,8 @@ temporal-banking-workflow/
 
 ## 🚨 Troubleshooting
 
+> **📖 For comprehensive troubleshooting guide, see [GETTING_STARTED.md#troubleshooting](GETTING_STARTED.md#troubleshooting)**
+
 ### Common Issues
 
 #### Search Attributes Error
@@ -552,12 +573,20 @@ curl -X POST http://localhost:8082/api/transfers/{workflowId}/cancel \
 
 ## 📚 Additional Resources
 
-- [docs/](docs/) - Project documentation index
+### Project Documentation
+- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Complete setup and usage guide
+- **[API_EXAMPLES.md](API_EXAMPLES.md)** - All API endpoints with examples
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference card
+- [docs/](docs/) - Technical architecture and design documents
 - [docs/REFACTORING_COMPLETE_REPORT.md](docs/REFACTORING_COMPLETE_REPORT.md) - Detailed refactoring summary
 - [docs/REFACTORING_PROGRESS.md](docs/REFACTORING_PROGRESS.md) - Phase-by-phase progress tracker
 - [request.http](./request.http) - Complete API test examples
+
+### External Resources
 - [Temporal Documentation](https://docs.temporal.io)
+- [Spring Boot Documentation](https://spring.io/projects/spring-boot)
 - [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+- [Debezium Documentation](https://debezium.io/documentation)
 
 ---
 

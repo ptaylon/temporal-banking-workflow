@@ -98,35 +98,30 @@ public class NotificationService implements SendNotificationUseCase, QueryNotifi
     }
 
     @Override
-    @Transactional
     public Optional<NotificationDomain> getNotificationById(final Long notificationId) {
         log.debug("Getting notification by ID: {}", notificationId);
         return notificationPersistencePort.findById(notificationId);
     }
 
     @Override
-    @Transactional
     public List<NotificationDomain> getNotificationsByTransferId(final String transferId) {
         log.debug("Getting notifications by transfer ID: {}", transferId);
         return notificationPersistencePort.findByTransferId(transferId);
     }
 
     @Override
-    @Transactional
     public List<NotificationDomain> getNotificationsByAccount(final String accountNumber) {
         log.debug("Getting notifications by account: {}", accountNumber);
         return notificationPersistencePort.findByAccountNumber(accountNumber);
     }
 
     @Override
-    @Transactional
     public List<NotificationDomain> getNotificationsByEventType(final String eventType) {
         log.debug("Getting notifications by event type: {}", eventType);
         return notificationPersistencePort.findByEventType(eventType);
     }
 
     @Override
-    @Transactional
     public List<NotificationDomain> getNotificationsByStatus(
             final NotificationDomain.NotificationStatus status) {
         log.debug("Getting notifications by status: {}", status);
@@ -134,7 +129,6 @@ public class NotificationService implements SendNotificationUseCase, QueryNotifi
     }
 
     @Override
-    @Transactional
     public List<NotificationDomain> getNotificationsByDateRange(
             final java.time.LocalDateTime start,
             final java.time.LocalDateTime end) {

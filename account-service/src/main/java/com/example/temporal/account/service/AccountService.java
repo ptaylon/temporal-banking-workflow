@@ -15,7 +15,6 @@ import java.util.List;
 public class AccountService {
     private final AccountRepository accountRepository;
 
-    @Transactional
     public Account getAccount(final String accountNumber) {
         return accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountNumber));
@@ -58,7 +57,6 @@ public class AccountService {
         accountRepository.save(account);
     }
 
-    @Transactional
     public List<Account> getAccounts(final List<String> accountNumbers) {
         return accountRepository.findByAccountNumberIn(accountNumbers);
     }

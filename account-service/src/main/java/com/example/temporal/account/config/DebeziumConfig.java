@@ -10,49 +10,36 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Map;
 import java.util.Properties;
 
 @Slf4j
 @Configuration
 public class DebeziumConfig {
 
-    @Value("${spring.datasource.username}")
-    private String dbUsername;
+    private final Map<String, String> debeziumProps;
 
-    @Value("${spring.datasource.password}")
-    private String dbPassword;
-
-    @Value("${spring.datasource.url}")
-    private String dbUrl;
-
-    // Debezium 2.5+ requires 'topic.prefix' (replaces the old 'database.server.name')
-    // Provide a sensible default and allow overriding via application.yml
-    @Value("${debezium.topic-prefix:account-service}")
-    private String topicPrefix;
+    public DebeziumConfig(@Value("#{${debezium}}") Map<String, String> debeziumProps) {
+        this.debeziumProps = debeziumProps;
+    }
 
     @Bean
     public DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine() {
-        final Properties props = new Properties();
-        props.setProperty("name", "account-service-postgres-connector");
-        props.setProperty("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
-        props.setProperty("offset.storage", "org.apache.kafka.connect.storage.FileOffsetBackingStore");
-        props.setProperty("offset.storage.file.filename", "./offsets.dat");
-        props.setProperty("offset.flush.interval.ms", "60000");
-
-        // Required topic prefix for naming emitted topics
-        props.setProperty("topic.prefix", topicPrefix);
-        
-        // PostgreSQL connection details
-        props.setProperty("database.hostname", extractHostname(dbUrl));
-        props.setProperty("database.port", extractPort(dbUrl));
-        props.setProperty("database.user", dbUsername);
-        props.setProperty("database.password", dbPassword);
-        props.setProperty("database.dbname", extractDatabaseName(dbUrl));
-        
-        // PostgreSQL specific properties
-        props.setProperty("plugin.name", "pgoutput");
-        props.setProperty("table.include.list", "public.accounts");
-        props.setProperty("publication.name", "dbz_publication");
+        Properties props = new Properties();
+        props.setProperty("name", debeziumProps.get("name"));
+        props.setProperty("connector.class", debeziumProps.get("connector-class"));
+        props.setProperty("offset.storage", debeziumProps.get("offset-storage"));
+        props.setProperty("offset.storage.file.filename", debeziumProps.get("offset-storage-file"));
+        props.setProperty("offset.flush.interval.ms", debeziumProps.get("offset-flush-interval-ms"));
+        props.setProperty("topic.prefix", debeziumProps.get("topic-prefix"));
+        props.setProperty("database.hostname", debeziumProps.get("database.hostname"));
+        props.setProperty("database.port", debeziumProps.get("database.port"));
+        props.setProperty("database.user", debeziumProps.get("database.username"));
+        props.setProperty("database.password", debeziumProps.get("database.password"));
+        props.setProperty("database.dbname", debeziumProps.get("database.dbname"));
+        props.setProperty("plugin.name", debeziumProps.get("plugin-name"));
+        props.setProperty("table.include.list", debeziumProps.get("table-include-list"));
+        props.setProperty("publication.name", debeziumProps.get("publication-name"));
 
         return DebeziumEngine.create(ChangeEventFormat.of(Connect.class))
                 .using(props)
@@ -63,22 +50,5 @@ public class DebeziumConfig {
     private void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
         SourceRecord sourceRecord = sourceRecordRecordChangeEvent.record();
         log.info("Key = {}, Value = {}", sourceRecord.key(), sourceRecord.value());
-        // Here you would typically send this to Kafka or process it directly
-    }
-
-    private String extractHostname(String jdbcUrl) {
-        // Example URL: jdbc:postgresql://localhost:5432/dbname
-        String[] parts = jdbcUrl.split("//")[1].split(":");
-        return parts[0];
-    }
-
-    private String extractPort(String jdbcUrl) {
-        String[] parts = jdbcUrl.split("//")[1].split(":");
-        return parts[1].split("/")[0];
-    }
-
-    private String extractDatabaseName(String jdbcUrl) {
-        String[] parts = jdbcUrl.split("/");
-        return parts[parts.length - 1];
     }
 }

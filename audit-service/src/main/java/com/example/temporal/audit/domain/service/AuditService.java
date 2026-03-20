@@ -84,14 +84,12 @@ public class AuditService implements ProcessCDCEventUseCase, QueryAuditUseCase {
     }
 
     @Override
-    @Transactional
     public Optional<AuditEventDomain> getAuditEventById(final Long auditEventId) {
         log.debug("Getting audit event by ID: {}", auditEventId);
         return auditPersistencePort.findById(auditEventId);
     }
 
     @Override
-    @Transactional
     public List<AuditEventDomain> getAuditEventsByEntity(
             final String entityType,
             final String entityId) {
@@ -100,21 +98,18 @@ public class AuditService implements ProcessCDCEventUseCase, QueryAuditUseCase {
     }
 
     @Override
-    @Transactional
     public List<AuditEventDomain> getAuditEventsByEntityType(final String entityType) {
         log.debug("Getting audit events by entity type: {}", entityType);
         return auditPersistencePort.findByEntityType(entityType);
     }
 
     @Override
-    @Transactional
     public List<AuditEventDomain> getAuditEventsByEventType(final String eventType) {
         log.debug("Getting audit events by event type: {}", eventType);
         return auditPersistencePort.findByEventType(eventType);
     }
 
     @Override
-    @Transactional
     public List<AuditEventDomain> getAuditEventsByTypeInRange(
             final String entityType,
             final List<String> eventTypes,
@@ -127,7 +122,6 @@ public class AuditService implements ProcessCDCEventUseCase, QueryAuditUseCase {
     }
 
     @Override
-    @Transactional
     public List<AuditEventDomain> getAuditEventsByUser(final String userId) {
         log.debug("Getting audit events by user: {}", userId);
         return auditPersistencePort.findByUserId(userId);
