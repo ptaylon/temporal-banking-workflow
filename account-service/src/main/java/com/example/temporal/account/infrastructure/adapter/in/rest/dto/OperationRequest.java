@@ -10,4 +10,5 @@ import java.math.BigDecimal;
 @Data
 public class OperationRequest {
     private BigDecimal amount;
+    private String idempotencyKey;
 }

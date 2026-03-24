@@ -2,6 +2,7 @@ package com.example.temporal.validation.domain.service;
 
 import com.example.temporal.validation.domain.model.TransferValidationDomain;
 import com.example.temporal.validation.domain.port.in.ValidateTransferUseCase;
+import com.example.temporal.validation.domain.port.in.QueryValidationUseCase;
 import com.example.temporal.validation.domain.port.out.AccountServicePort;
 import com.example.temporal.validation.domain.port.out.FraudRulePort;
 import com.example.temporal.validation.domain.port.out.TransferLimitPort;
@@ -11,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -20,7 +23,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ValidationService implements ValidateTransferUseCase {
+public class ValidationService implements ValidateTransferUseCase, QueryValidationUseCase {
 
     private final ValidationPersistencePort validationPersistencePort;
     private final AccountServicePort accountServicePort;
@@ -231,4 +234,34 @@ public class ValidationService implements ValidateTransferUseCase {
             String reason,
             Integer fraudScore
     ) {}
+
+    // ========== QueryValidationUseCase Implementation ==========
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<TransferValidationDomain> getValidationById(Long validationId) {
+        log.debug("Getting validation by ID: {}", validationId);
+        return validationPersistencePort.findById(validationId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransferValidationDomain> getValidationsByTransferId(String transferId) {
+        log.debug("Getting validations by transfer ID: {}", transferId);
+        return validationPersistencePort.findByTransferId(transferId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransferValidationDomain> getValidationsByAccount(String accountNumber) {
+        log.debug("Getting validations by account: {}", accountNumber);
+        return validationPersistencePort.findByAccountNumber(accountNumber);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransferValidationDomain> getPendingValidations() {
+        log.debug("Getting pending validations");
+        return validationPersistencePort.findPendingValidations();
+    }
 }

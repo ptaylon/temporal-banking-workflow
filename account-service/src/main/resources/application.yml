@@ -1,22 +1,22 @@
 server:
   port: 8081
 
-debezium:
-  topic-prefix: account-service
-  name: account-service-postgres-connector
-  connector-class: io.debezium.connector.postgresql.PostgresConnector
-  offset-storage: org.apache.kafka.connect.storage.FileOffsetBackingStore
-  offset-storage-file: ./offsets.dat
-  offset-flush-interval-ms: 60000
-  plugin-name: pgoutput
-  table-include-list: public.accounts
-  publication-name: dbz_publication
-  database:
-    hostname: localhost
-    port: 5432
-    username: postgres
-    password: postgres
-    dbname: banking_demo
+# debezium:
+#   name: account-service-postgres-connector
+#   connector-class: io.debezium.connector.postgresql.PostgresConnector
+#   offset-storage: org.apache.kafka.connect.storage.FileOffsetBackingStore
+#   offset-storage-file: ./offsets.dat
+#   offset-flush-interval-ms: 60000
+#   plugin-name: pgoutput
+#   topic-prefix: banking
+#   table-include-list: public.accounts
+#   publication-name: dbz_publication
+#   database:
+#     hostname: localhost
+#     port: "5432"
+#     username: postgres
+#     password: postgres
+#     dbname: banking_demo
 
 spring:
   application:
@@ -33,7 +33,7 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: true
+    show-sql: false
 
 management:
   endpoints:

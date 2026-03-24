@@ -7,6 +7,8 @@ import com.example.temporal.common.workflow.MoneyTransferActivities;
 import com.example.temporal.transfer.client.AccountServiceClient;
 import com.example.temporal.transfer.client.ValidationServiceClient;
 import com.example.temporal.transfer.domain.port.out.TransferPersistencePort;
+import com.example.temporal.transfer.infrastructure.adapter.out.http.LockAccountsRequest;
+import com.example.temporal.transfer.infrastructure.adapter.out.http.OperationRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -91,7 +93,8 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             throw new IllegalArgumentException("Destination account number cannot be null or empty");
         }
         log.info("Locking accounts: {} and {}", sourceAccountNumber, destinationAccountNumber);
-        accountServiceClient.lockAccounts(sourceAccountNumber, destinationAccountNumber);
+        final LockAccountsRequest request = new LockAccountsRequest(sourceAccountNumber, destinationAccountNumber);
+        accountServiceClient.lockAccounts(request);
     }
 
     @Override
@@ -103,7 +106,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             throw new IllegalArgumentException("Amount must be positive");
         }
         log.info("Debiting account {} amount {} - Starting with 10s delay for testing", accountNumber, amount);
-        
+
         try {
             // Delay de 10 segundos para permitir testes de pause/resume/cancel
             Thread.sleep(10000);
@@ -112,8 +115,12 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Debit operation interrupted", e);
         }
-        
-        accountServiceClient.debitAccount(accountNumber, amount);
+
+        // ✅ NOTA: Idempotency key deve ser gerada no request pelo caller
+        // Activity não tem acesso ao Workflow.getInfo()
+        // O idempotency key já deve vir no OperationRequest
+        final OperationRequest request = new OperationRequest(amount, null);
+        accountServiceClient.debitAccount(accountNumber, request);
         log.info("Debit completed for account {} amount {}", accountNumber, amount);
     }
 
@@ -126,7 +133,7 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             throw new IllegalArgumentException("Amount must be positive");
         }
         log.info("Crediting account {} amount {} - Starting with 10s delay for testing", accountNumber, amount);
-        
+
         try {
             // Delay de 10 segundos para permitir testes de pause/resume/cancel
             Thread.sleep(10000);
@@ -135,8 +142,12 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Credit operation interrupted", e);
         }
-        
-        accountServiceClient.creditAccount(accountNumber, amount);
+
+        // ✅ NOTA: Idempotency key deve ser gerada no request pelo caller
+        // Activity não tem acesso ao Workflow.getInfo()
+        // O idempotency key já deve vir no OperationRequest
+        final OperationRequest request = new OperationRequest(amount, null);
+        accountServiceClient.creditAccount(accountNumber, request);
         log.info("Credit completed for account {} amount {}", accountNumber, amount);
     }
 
@@ -171,13 +182,19 @@ public class MoneyTransferActivitiesImpl implements MoneyTransferActivities {
     @Override
     public void compensateDebit(final String accountNumber, final BigDecimal amount) {
         log.info("Compensating debit for account {} amount {}", accountNumber, amount);
-        accountServiceClient.creditAccount(accountNumber, amount); // Reverse the debit
+        // ✅ GERA IDEMPOTENCY KEY ÚNICA PARA COMPENSAÇÃO
+        final String idempotencyKey = "compensate-debit-" + accountNumber + "-" + System.currentTimeMillis();
+        final OperationRequest request = new OperationRequest(amount, idempotencyKey);
+        accountServiceClient.creditAccount(accountNumber, request); // Reverse the debit
     }
 
     @Override
     public void compensateCredit(final String accountNumber, final BigDecimal amount) {
         log.info("Compensating credit for account {} amount {}", accountNumber, amount);
-        accountServiceClient.debitAccount(accountNumber, amount); // Reverse the credit
+        // ✅ GERA IDEMPOTENCY KEY ÚNICA PARA COMPENSAÇÃO
+        final String idempotencyKey = "compensate-credit-" + accountNumber + "-" + System.currentTimeMillis();
+        final OperationRequest request = new OperationRequest(amount, idempotencyKey);
+        accountServiceClient.debitAccount(accountNumber, request); // Reverse the credit
     }
 
     @Override

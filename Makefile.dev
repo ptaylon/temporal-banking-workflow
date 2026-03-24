@@ -45,9 +45,25 @@ dev-start: ## 🚀 Inicia todos os serviços em background
 	@nohup java -jar validation-service/target/validation-service-1.0-SNAPSHOT.jar > logs/validation-service.log 2>&1 & echo $$! > pids/validation-service.pid
 	@nohup java -jar notification-service/target/notification-service-1.0-SNAPSHOT.jar > logs/notification-service.log 2>&1 & echo $$! > pids/notification-service.pid
 	@nohup java -jar audit-service/target/audit-service-1.0-SNAPSHOT.jar > logs/audit-service.log 2>&1 & echo $$! > pids/audit-service.pid
-	@sleep 10
-	@$(MAKE) -f Makefile debug-services
-	@echo "$(GREEN)✅ Todos os serviços iniciados!$(NC)"
+	@sleep 15
+	@echo "$(GREEN)✅ Serviços iniciados! Verifique os logs com: make -f Makefile.dev dev-logs-all$(NC)"
+	@echo ""
+	@echo "$(BLUE)Status dos serviços:$(NC)"
+	@for service in account-service transfer-service validation-service notification-service audit-service; do \
+		case $$service in \
+			account-service) port=8081;; \
+			transfer-service) port=8082;; \
+			validation-service) port=8087;; \
+			notification-service) port=8086;; \
+			audit-service) port=8085;; \
+		esac; \
+		printf "  %-25s " "$$service:"; \
+		if curl -s http://localhost:$$port/actuator/health >/dev/null 2>&1; then \
+			echo "$(GREEN)✅ UP$(NC)"; \
+		else \
+			echo "$(RED)❌ DOWN$(NC)"; \
+		fi; \
+	done
 
 dev-stop: ## 🛑 Para todos os serviços
 	@echo "$(BLUE)🛑 Parando serviços...$(NC)"

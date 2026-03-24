@@ -1,8 +1,11 @@
 package com.example.temporal.common.dto;
 
+import lombok.Getter;
+
 /**
  * Enum para ações de controle de transferência
  */
+@Getter
 public enum TransferControlAction {
     PAUSE("Pausar transferência"),
     RESUME("Retomar transferência"),
@@ -13,8 +16,5 @@ public enum TransferControlAction {
     TransferControlAction(String description) {
         this.description = description;
     }
-    
-    public String getDescription() {
-        return description;
-    }
+
 }

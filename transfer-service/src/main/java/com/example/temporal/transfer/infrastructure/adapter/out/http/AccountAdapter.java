@@ -22,7 +22,8 @@ public class AccountAdapter implements AccountPort {
     @Override
     public void lockAccounts(String sourceAccountNumber, String destinationAccountNumber) {
         log.debug("Locking accounts: {} and {}", sourceAccountNumber, destinationAccountNumber);
-        accountServiceClient.lockAccounts(sourceAccountNumber, destinationAccountNumber);
+        final LockAccountsRequest request = new LockAccountsRequest(sourceAccountNumber, destinationAccountNumber);
+        accountServiceClient.lockAccounts(request);
     }
 
     @Override
@@ -36,13 +37,15 @@ public class AccountAdapter implements AccountPort {
     @Override
     public void debitAccount(String accountNumber, BigDecimal amount) {
         log.debug("Debiting account {} amount {}", accountNumber, amount);
-        accountServiceClient.debitAccount(accountNumber, amount);
+        final OperationRequest request = new OperationRequest(amount, null);
+        accountServiceClient.debitAccount(accountNumber, request);
     }
 
     @Override
     public void creditAccount(String accountNumber, BigDecimal amount) {
         log.debug("Crediting account {} amount {}", accountNumber, amount);
-        accountServiceClient.creditAccount(accountNumber, amount);
+        final OperationRequest request = new OperationRequest(amount, null);
+        accountServiceClient.creditAccount(accountNumber, request);
     }
 
     @Override

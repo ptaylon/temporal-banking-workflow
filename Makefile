@@ -11,7 +11,7 @@ RED := \033[0;31m
 NC := \033[0m # No Color
 
 # Configurações
-DOCKER_COMPOSE_FILE := docker-compose-banking.yml
+DOCKER_COMPOSE_FILE := docker-compose.yml
 SERVICES := account-service transfer-service validation-service notification-service audit-service
 
 help: ## 📋 Mostra todos os comandos disponíveis

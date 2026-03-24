@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(name = "validation-service", url = "${service.validation.url}")
 public interface ValidationServiceClient {
-    
-    @PostMapping("/api/validations/transfer")
+
+    @PostMapping("/api/validations")
     void validateTransfer(@RequestBody TransferRequest request);
 }

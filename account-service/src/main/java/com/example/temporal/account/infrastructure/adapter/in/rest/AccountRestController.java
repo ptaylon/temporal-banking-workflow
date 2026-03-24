@@ -1,9 +1,10 @@
 package com.example.temporal.account.infrastructure.adapter.in.rest;
 
 import com.example.temporal.account.domain.model.AccountDomain;
-import com.example.temporal.account.domain.port.in.AccountOperationsUseCase;
 import com.example.temporal.account.domain.port.in.CreateAccountUseCase;
 import com.example.temporal.account.domain.port.in.QueryAccountUseCase;
+import com.example.temporal.account.domain.service.AccountOperationService;
+import com.example.temporal.common.aspect.IdempotentAspect;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.AccountCreateRequest;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.AccountResponse;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.BalanceResponse;
@@ -11,7 +12,6 @@ import com.example.temporal.account.infrastructure.adapter.in.rest.dto.LockAccou
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.MessageResponse;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.OperationRequest;
 import com.example.temporal.account.infrastructure.adapter.in.rest.mapper.AccountRestMapper;
-import com.example.temporal.common.model.Account;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -32,7 +32,7 @@ public class AccountRestController {
 
     private final CreateAccountUseCase createAccountUseCase;
     private final QueryAccountUseCase queryAccountUseCase;
-    private final AccountOperationsUseCase operationsUseCase;
+    private final AccountOperationService accountOperationService;
     private final AccountRestMapper accountRestMapper;
 
     @PostMapping
@@ -79,7 +79,7 @@ public class AccountRestController {
         log.info("REST: Locking accounts: {} and {}",
                 request.getSourceAccountNumber(), request.getDestinationAccountNumber());
 
-        operationsUseCase.lockAccounts(
+        accountOperationService.lockAccounts(
                 request.getSourceAccountNumber(),
                 request.getDestinationAccountNumber());
 
@@ -92,26 +92,66 @@ public class AccountRestController {
     public ResponseEntity<MessageResponse> debitAccount(
             @PathVariable final String accountNumber,
             @RequestBody final OperationRequest request) {
+
         log.info("REST: Debiting account: {} amount: {}", accountNumber, request.getAmount());
 
-        operationsUseCase.debitAccount(accountNumber, request.getAmount());
+        try {
+            accountOperationService.debitWithIdempotency(
+                    accountNumber,
+                    request.getAmount(),
+                    request.getIdempotencyKey()
+            );
 
-        final MessageResponse response = new MessageResponse();
-        response.setMessage("Account debited successfully");
-        return ResponseEntity.ok(response);
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Account debited successfully");
+            return ResponseEntity.ok(response);
+
+        } catch (IdempotentAspect.IdempotentOperationException e) {
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Operation already processed");
+            return ResponseEntity.ok()
+                    .header("X-Idempotency-Status", "ALREADY_PROCESSED")
+                    .body(response);
+
+        } catch (Exception e) {
+            log.error("Error debiting account: {}", e.getMessage());
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
     }
 
     @PostMapping("/{accountNumber}/credit")
     public ResponseEntity<MessageResponse> creditAccount(
             @PathVariable final String accountNumber,
             @RequestBody final OperationRequest request) {
+
         log.info("REST: Crediting account: {} amount: {}", accountNumber, request.getAmount());
 
-        operationsUseCase.creditAccount(accountNumber, request.getAmount());
+        try {
+            accountOperationService.creditWithIdempotency(
+                    accountNumber,
+                    request.getAmount(),
+                    request.getIdempotencyKey()
+            );
 
-        final MessageResponse response = new MessageResponse();
-        response.setMessage("Account credited successfully");
-        return ResponseEntity.ok(response);
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Account credited successfully");
+            return ResponseEntity.ok(response);
+
+        } catch (IdempotentAspect.IdempotentOperationException e) {
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Operation already processed");
+            return ResponseEntity.ok()
+                    .header("X-Idempotency-Status", "ALREADY_PROCESSED")
+                    .body(response);
+
+        } catch (Exception e) {
+            log.error("Error crediting account: {}", e.getMessage());
+            MessageResponse response = new MessageResponse();
+            response.setMessage("Error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
     }
 
     @GetMapping("/{accountNumber}/balance")
@@ -119,7 +159,7 @@ public class AccountRestController {
             @PathVariable final String accountNumber) {
         log.debug("REST: Getting balance for account: {}", accountNumber);
 
-        final BigDecimal balance = operationsUseCase.getBalance(accountNumber);
+        final BigDecimal balance = accountOperationService.getBalance(accountNumber);
 
         final BalanceResponse response = new BalanceResponse();
         response.setAccountNumber(accountNumber);

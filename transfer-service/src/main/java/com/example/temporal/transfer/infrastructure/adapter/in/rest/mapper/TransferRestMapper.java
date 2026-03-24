@@ -18,16 +18,14 @@ import java.util.List;
 /**
  * Mapper for Transfer REST API - converts between DTOs and domain objects
  */
-@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING,
+        imports = {LocalDateTime.class})
 public interface TransferRestMapper {
 
     TransferRestMapper INSTANCE = Mappers.getMapper(TransferRestMapper.class);
 
     // ========== TransferRequest ↔ Domain Command ==========
 
-    @Mapping(target = "delayInSeconds", ignore = true)
-    @Mapping(target = "timeoutInSeconds", ignore = true)
-    @Mapping(target = "allowCancelDuringDelay", ignore = true)
     InitiateTransferUseCase.InitiateTransferCommand toInitiateTransferCommand(TransferRequest request);
 
     // ========== TransferDomain ↔ TransferResponse ==========

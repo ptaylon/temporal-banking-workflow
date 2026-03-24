@@ -2,19 +2,22 @@ package com.example.temporal.common.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
+/**
+ * Transfer entity with idempotency support
+ */
 @Data
-@Entity
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
 @Accessors(chain = true)
+@Entity
 @Table(name = "transfers")
-public class Transfer {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class Transfer extends BaseEntity {
 
     @Column(nullable = false)
     private String sourceAccountNumber;
@@ -35,23 +38,6 @@ public class Transfer {
     @Column(length = 255)
     private String failureReason;
 
-    @Column(unique = true, length = 100)
-    private String idempotencyKey;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+    // Idempotency key inherited from BaseEntity
+    // Unique constraint already defined in parent
 }
