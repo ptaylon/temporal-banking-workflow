@@ -1,6 +1,7 @@
 package com.example.temporal.transfer.infrastructure.adapter.out.http;
 
 import com.example.temporal.common.dto.TransferRequest;
+import com.example.temporal.common.exception.ValidationException;
 import com.example.temporal.transfer.client.ValidationServiceClient;
 import com.example.temporal.transfer.domain.model.TransferDomain;
 import com.example.temporal.transfer.domain.port.out.ValidationPort;

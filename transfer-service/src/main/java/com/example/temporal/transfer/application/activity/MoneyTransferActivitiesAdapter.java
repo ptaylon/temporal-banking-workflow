@@ -43,9 +43,9 @@ public class MoneyTransferActivitiesAdapter implements MoneyTransferActivities {
 
             log.info("Transfer validation successful for request: {}", request);
 
-        } catch (ValidationPort.ValidationException e) {
+        } catch (ValidationException e) {
             log.error("Business validation error: {}", e.getMessage());
-            throw new ValidationException("Validation failed: " + e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
             log.warn("Transfer validation failed: {}", e.getMessage());
             throw e; // Allow retry for temporary errors

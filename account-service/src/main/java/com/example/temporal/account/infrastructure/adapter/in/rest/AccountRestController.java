@@ -4,7 +4,7 @@ import com.example.temporal.account.domain.model.AccountDomain;
 import com.example.temporal.account.domain.port.in.CreateAccountUseCase;
 import com.example.temporal.account.domain.port.in.QueryAccountUseCase;
 import com.example.temporal.account.domain.service.AccountOperationService;
-import com.example.temporal.common.aspect.IdempotentAspect;
+import com.example.temporal.common.aspect.IdempotentAspect.IdempotentOperationException;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.AccountCreateRequest;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.AccountResponse;
 import com.example.temporal.account.infrastructure.adapter.in.rest.dto.BalanceResponse;
@@ -106,7 +106,7 @@ public class AccountRestController {
             response.setMessage("Account debited successfully");
             return ResponseEntity.ok(response);
 
-        } catch (IdempotentAspect.IdempotentOperationException e) {
+        } catch (IdempotentOperationException e) {
             MessageResponse response = new MessageResponse();
             response.setMessage("Operation already processed");
             return ResponseEntity.ok()
@@ -139,7 +139,7 @@ public class AccountRestController {
             response.setMessage("Account credited successfully");
             return ResponseEntity.ok(response);
 
-        } catch (IdempotentAspect.IdempotentOperationException e) {
+        } catch (IdempotentOperationException e) {
             MessageResponse response = new MessageResponse();
             response.setMessage("Operation already processed");
             return ResponseEntity.ok()

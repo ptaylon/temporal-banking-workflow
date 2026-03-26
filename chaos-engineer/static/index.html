@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌪️ Chaos Engineering Dashboard - Temporal Banking</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --danger: #ef4444;
+            --danger-dark: #dc2626;
+            --success: #22c55e;
+            --success-dark: #16a34a;
+            --warning: #f59e0b;
+            --warning-dark: #d97706;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-dark));
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--warning));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+            padding: 15px 20px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.online {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .status-indicator.offline {
+            background: var(--danger);
+            box-shadow: 0 0 10px var(--danger);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card-header h3 {
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--danger-dark);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: var(--success-dark);
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: var(--warning-dark);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .control-row label {
+            min-width: 120px;
+            color: var(--text-muted);
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 8px;
+            border-radius: 4px;
+            background: var(--bg-dark);
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        .value-display {
+            min-width: 80px;
+            text-align: right;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .scenario-btn {
+            padding: 15px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-dark);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+
+        .scenario-btn:hover {
+            border-color: var(--primary);
+            background: var(--bg-hover);
+        }
+
+        .scenario-btn.danger {
+            border-color: var(--danger);
+        }
+
+        .scenario-btn.danger:hover {
+            background: var(--danger);
+        }
+
+        .scenario-btn.success {
+            border-color: var(--success);
+        }
+
+        .scenario-btn.success:hover {
+            background: var(--success);
+        }
+
+        .log-container {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 15px;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-timestamp {
+            color: var(--text-muted);
+            min-width: 200px;
+        }
+
+        .log-action {
+            color: var(--primary);
+            font-weight: bold;
+            min-width: 150px;
+        }
+
+        .log-target {
+            color: var(--warning);
+            min-width: 120px;
+        }
+
+        .log-status {
+            color: var(--success);
+        }
+
+        .log-status.failed {
+            color: var(--danger);
+        }
+
+        .service-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .service-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .service-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .service-name {
+            font-weight: 600;
+        }
+
+        .service-port {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .chaos-mode {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .chaos-mode-btn {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            animation: glow 2s infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px var(--danger); }
+            50% { box-shadow: 0 0 40px var(--danger); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            border: 2px solid var(--danger);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: var(--danger);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            z-index: 3000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success {
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .toast.error {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .toast.warning {
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .icon {
+            font-size: 1.5rem;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-running {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .badge-stopped {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: var(--bg-dark);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .metric-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+
+        .workflow-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌪️ Chaos Engineering Dashboard</h1>
+            <p>Test Temporal's resilience by injecting failures into your banking workflow</p>
+        </header>
+
+        <!-- Chaos Mode Button -->
+        <div class="chaos-mode">
+            <button class="btn btn-danger chaos-mode-btn" onclick="toggleChaosMode()">
+                ⚠️ CHAOS MODE
+            </button>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="db-status"></div>
+                <span>PostgreSQL</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="kafka-status"></div>
+                <span>Kafka</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="cdc-status"></div>
+                <span>CDC</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="temporal-status"></div>
+                <span>Temporal</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="services-status"></div>
+                <span>Services</span>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value" id="total-experiments">0</div>
+                <div class="metric-label">Total Experiments</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="active-chaos">0</div>
+                <div class="metric-label">Active Chaos</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="delay-value">0ms</div>
+                <div class="metric-label">Network Delay</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="packet-loss-value">0%</div>
+                <div class="metric-label">Packet Loss</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid">
+            <!-- Database Control -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">🗄️</span>
+                    <h3>Database Chaos</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="controlDatabase('down')">
+                            ⬇️ Stop Database
+                        </button>
+                        <button class="btn btn-success" onclick="controlDatabase('up')">
+                            ⬆️ Start Database
+                        </button>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 10px;">
+                        Stops both PostgreSQL instances (banking + audit). Tests Temporal's retry behavior.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Kafka Control -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">📬</span>
+                    <h3>Kafka Chaos</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="controlKafka('down')">
+                            ⬇️ Stop Kafka
+                        </button>
+                        <button class="btn btn-success" onclick="controlKafka('up')">
+                            ⬆️ Start Kafka
+                        </button>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 10px;">
+                        Stops Kafka cluster (Kafka + Zookeeper). Tests event-driven resilience.
+                    </p>
+                </div>
+            </div>
+
+            <!-- CDC Control -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">🔄</span>
+                    <h3>CDC Chaos</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="controlCDC('down')">
+                            ⬇️ Stop CDC
+                        </button>
+                        <button class="btn btn-success" onclick="controlCDC('up')">
+                            ⬆️ Start CDC
+                        </button>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 10px;">
+                        Stops Debezium connector. Tests CDC-based audit trail resilience.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Temporal Control -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">⏱️</span>
+                    <h3>Temporal Chaos</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="controlTemporal('down')">
+                            ⬇️ Stop Temporal
+                        </button>
+                        <button class="btn btn-success" onclick="controlTemporal('up')">
+                            ⬆️ Start Temporal
+                        </button>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 10px;">
+                        Stops Temporal server. Ultimate test of workflow persistence.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Network Conditions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">🌐</span>
+                    <h3>Network Conditions</h3>
+                </div>
+                <div class="card-body">
+                    <div class="control-row">
+                        <label>Network Delay:</label>
+                        <input type="range" id="delay-slider" min="0" max="5000" value="0" step="100" onchange="updateDelay(this.value)">
+                        <span class="value-display" id="delay-display">0ms</span>
+                    </div>
+                    <div class="control-row">
+                        <label>Packet Loss:</label>
+                        <input type="range" id="loss-slider" min="0" max="100" value="0" step="5" onchange="updatePacketLoss(this.value)">
+                        <span class="value-display" id="loss-display">0%</span>
+                    </div>
+                    <button class="btn btn-warning" onclick="resetNetwork()" style="margin-top: 10px;">
+                        🔄 Reset Network
+                    </button>
+                </div>
+            </div>
+
+            <!-- Docker Control -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">🐳</span>
+                    <h3>Docker Control</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="controlDocker('stop-all')">
+                            ⏹️ Stop All
+                        </button>
+                        <button class="btn btn-success" onclick="controlDocker('start-all')">
+                            ▶️ Start All
+                        </button>
+                    </div>
+                    <button class="btn btn-warning" onclick="controlDocker('kill-random')" style="width: 100%;">
+                        🎲 Kill Random Container
+                    </button>
+                    <div style="margin-top: 15px;">
+                        <label style="color: var(--text-muted); font-size: 0.85rem;">Individual Containers:</label>
+                        <select id="container-select" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-dark); color: var(--text); border: 1px solid var(--border); border-radius: 6px;">
+                            <option value="banking-postgres">PostgreSQL</option>
+                            <option value="banking-kafka">Kafka</option>
+                            <option value="banking-temporal">Temporal</option>
+                            <option value="banking-debezium-connect">Debezium</option>
+                            <option value="banking-opensearch">OpenSearch</option>
+                        </select>
+                        <div class="btn-group" style="margin-top: 10px;">
+                            <button class="btn btn-danger" onclick="controlSelectedContainer('stop')">Stop</button>
+                            <button class="btn btn-success" onclick="controlSelectedContainer('start')">Start</button>
+                            <button class="btn btn-warning" onclick="controlSelectedContainer('restart')">Restart</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Java Services -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">☕</span>
+                    <h3>Java Services</h3>
+                </div>
+                <div class="card-body">
+                    <div class="service-list">
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="service-name">Account Service</span>
+                                <span class="service-port">:8081</span>
+                            </div>
+                            <button class="btn btn-danger" style="width: auto; padding: 8px 15px;" onclick="controlService('account-service', 'stop')">Stop</button>
+                        </div>
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="service-name">Transfer Service</span>
+                                <span class="service-port">:8082</span>
+                            </div>
+                            <button class="btn btn-danger" style="width: auto; padding: 8px 15px;" onclick="controlService('transfer-service', 'stop')">Stop</button>
+                        </div>
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="service-name">Validation Service</span>
+                                <span class="service-port">:8087</span>
+                            </div>
+                            <button class="btn btn-danger" style="width: auto; padding: 8px 15px;" onclick="controlService('validation-service', 'stop')">Stop</button>
+                        </div>
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="service-name">Notification Service</span>
+                                <span class="service-port">:8086</span>
+                            </div>
+                            <button class="btn btn-danger" style="width: auto; padding: 8px 15px;" onclick="controlService('notification-service', 'stop')">Stop</button>
+                        </div>
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="service-name">Audit Service</span>
+                                <span class="service-port">:8085</span>
+                            </div>
+                            <button class="btn btn-danger" style="width: auto; padding: 8px 15px;" onclick="controlService('audit-service', 'stop')">Stop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workflow Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">🎯</span>
+                    <h3>Workflow Chaos</h3>
+                </div>
+                <div class="card-body">
+                    <div class="workflow-actions">
+                        <button class="btn btn-danger" onclick="workflowAction('cancel-random')">
+                            ❌ Cancel Random
+                        </button>
+                        <button class="btn btn-danger" onclick="workflowAction('terminate-all')">
+                            💀 Terminate All
+                        </button>
+                        <button class="btn btn-warning" onclick="workflowAction('query-random')">
+                            🔍 Query Random
+                        </button>
+                        <button class="btn btn-primary" onclick="refreshStatus()">
+                            🔄 Refresh Status
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fault Injection -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="icon">💉</span>
+                    <h3>Fault Injection</h3>
+                </div>
+                <div class="card-body">
+                    <div class="control-row">
+                        <label>Duration:</label>
+                        <input type="number" id="fault-duration" value="30" min="5" max="300" style="width: 80px; padding: 8px; background: var(--bg-dark); color: var(--text); border: 1px solid var(--border); border-radius: 6px;">
+                        <span style="color: var(--text-muted);">seconds</span>
+                    </div>
+                    <div class="workflow-actions">
+                        <button class="btn btn-warning" onclick="injectFault('timeout')">
+                            ⏱️ Timeout
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('connection-reset')">
+                            🔌 Connection Reset
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('slow-db')">
+                            🐌 Slow Database
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('message-queue-backlog')">
+                            📦 MQ Backlog
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scenarios -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <span class="icon">🎬</span>
+                    <h3>Predefined Scenarios</h3>
+                </div>
+                <div class="card-body">
+                    <div class="scenario-grid">
+                        <button class="scenario-btn danger" onclick="runScenario('database-failure')">
+                            🗄️ Database Failure
+                        </button>
+                        <button class="scenario-btn danger" onclick="runScenario('kafka-outage')">
+                            📬 Kafka Outage
+                        </button>
+                        <button class="scenario-btn danger" onclick="runScenario('temporal-down')">
+                            ⏱️ Temporal Down
+                        </button>
+                        <button class="scenario-btn danger" onclick="runScenario('full-infrastructure-down')">
+                            💥 Full Infrastructure Down
+                        </button>
+                        <button class="scenario-btn warning" onclick="runScenario('network-degradation')">
+                            🌐 Network Degradation
+                        </button>
+                        <button class="scenario-btn danger" onclick="runScenario('cascading-failure')">
+                            🎭 Cascading Failure
+                        </button>
+                        <button class="scenario-btn success" onclick="runScenario('recover-all')">
+                            ✅ Recover All
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Experiment Log -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <span class="icon">📋</span>
+                    <h3>Experiment Log</h3>
+                    <button class="btn btn-primary" style="width: auto; margin-left: auto;" onclick="refreshLog()">🔄 Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="log-container" id="experiment-log">
+                        <div class="log-entry">
+                            <span class="log-timestamp">No experiments yet...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal" id="confirm-modal">
+        <div class="modal-content">
+            <h3>⚠️ Confirm Destructive Action</h3>
+            <p id="confirm-message">Are you sure you want to proceed?</p>
+            <div class="modal-actions">
+                <button class="btn btn-success" onclick="confirmAction()" style="flex: 1;">Confirm</button>
+                <button class="btn btn-danger" onclick="cancelAction()" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let pendingAction = null;
+        let chaosModeActive = false;
+        let autoRefreshInterval;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshStatus();
+            refreshLog();
+            autoRefreshInterval = setInterval(() => {
+                refreshStatus();
+            }, 5000);
+        });
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // API calls
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (data) options.body = JSON.stringify(data);
+                
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                return { error: error.message };
+            }
+        }
+
+        // Status refresh
+        async function refreshStatus() {
+            const status = await apiCall('/status');
+            
+            if (status.infrastructure) {
+                updateStatusIndicator('db-status', status.infrastructure.postgres?.running);
+                updateStatusIndicator('kafka-status', status.infrastructure.kafka?.running);
+                updateStatusIndicator('cdc-status', status.infrastructure.debezium?.running);
+                updateStatusIndicator('temporal-status', status.infrastructure.temporal?.running);
+            }
+
+            if (status.chaos_state) {
+                document.getElementById('total-experiments').textContent = status.chaos_state.experiments_log?.length || 0;
+                
+                let activeCount = 0;
+                if (status.chaos_state.database_down) activeCount++;
+                if (status.chaos_state.kafka_down) activeCount++;
+                if (status.chaos_state.cdc_down) activeCount++;
+                if (status.chaos_state.temporal_down) activeCount++;
+                document.getElementById('active-chaos').textContent = activeCount;
+
+                document.getElementById('delay-value').textContent = `${status.chaos_state.network_delay_ms || 0}ms`;
+                document.getElementById('packet-loss-value').textContent = `${status.chaos_state.packet_loss_percent || 0}%`;
+
+                // Update sliders
+                document.getElementById('delay-slider').value = status.chaos_state.network_delay_ms || 0;
+                document.getElementById('delay-display').textContent = `${status.chaos_state.network_delay_ms || 0}ms`;
+                document.getElementById('loss-slider').value = status.chaos_state.packet_loss_percent || 0;
+                document.getElementById('loss-display').textContent = `${status.chaos_state.packet_loss_percent || 0}%`;
+            }
+
+            // Services status
+            const servicesHealthy = Object.values(status.services || {}).every(s => s.healthy);
+            updateStatusIndicator('services-status', servicesHealthy);
+        }
+
+        function updateStatusIndicator(elementId, isOnline) {
+            const element = document.getElementById(elementId);
+            element.className = `status-indicator ${isOnline ? 'online' : 'offline'}`;
+        }
+
+        // Chaos controls
+        async function controlDatabase(action) {
+            const result = await apiCall('/chaos/database', 'POST', { action });
+            showToast(result.status || 'Database control executed', result.success ? 'success' : 'error');
+            refreshStatus();
+        }
+
+        async function controlKafka(action) {
+            const result = await apiCall('/chaos/kafka', 'POST', { action });
+            showToast(result.status || 'Kafka control executed', result.success ? 'success' : 'error');
+            refreshStatus();
+        }
+
+        async function controlCDC(action) {
+            const result = await apiCall('/chaos/cdc', 'POST', { action });
+            showToast(result.status || 'CDC control executed', result.success ? 'success' : 'error');
+            refreshStatus();
+        }
+
+        async function controlTemporal(action) {
+            if (action === 'down') {
+                showConfirm('Stopping Temporal will interrupt all running workflows. Continue?', () => {
+                    apiCall('/chaos/temporal', 'POST', { action });
+                    showToast('Temporal stop command sent', 'warning');
+                    refreshStatus();
+                });
+            } else {
+                const result = await apiCall('/chaos/temporal', 'POST', { action });
+                showToast(result.status || 'Temporal control executed', result.success ? 'success' : 'error');
+                refreshStatus();
+            }
+        }
+
+        function updateDelay(value) {
+            document.getElementById('delay-display').textContent = `${value}ms`;
+            apiCall('/chaos/delay', 'POST', { delay_ms: parseInt(value) });
+        }
+
+        function updatePacketLoss(value) {
+            document.getElementById('loss-display').textContent = `${value}%`;
+            apiCall('/chaos/packet-loss', 'POST', { loss_percent: parseInt(value) });
+        }
+
+        async function resetNetwork() {
+            await apiCall('/chaos/delay', 'POST', { delay_ms: 0 });
+            await apiCall('/chaos/packet-loss', 'POST', { loss_percent: 0 });
+            document.getElementById('delay-slider').value = 0;
+            document.getElementById('delay-display').textContent = '0ms';
+            document.getElementById('loss-slider').value = 0;
+            document.getElementById('loss-display').textContent = '0%';
+            showToast('Network conditions reset', 'success');
+        }
+
+        async function controlDocker(action) {
+            if (action === 'stop-all') {
+                showConfirm('This will stop ALL containers. Continue?', async () => {
+                    const result = await apiCall('/chaos/docker', 'POST', { action });
+                    showToast(result.status || 'Docker control executed', result.success ? 'success' : 'error');
+                    refreshStatus();
+                });
+            } else {
+                const result = await apiCall('/chaos/docker', 'POST', { action });
+                showToast(result.status || 'Docker control executed', result.success ? 'success' : 'error');
+                refreshStatus();
+            }
+        }
+
+        function controlSelectedContainer(action) {
+            const container = document.getElementById('container-select').value;
+            apiCall('/chaos/docker', 'POST', { action, container });
+            showToast(`${action} command sent to ${container}`, 'success');
+            refreshStatus();
+        }
+
+        async function controlService(service, action) {
+            if (action === 'stop') {
+                showConfirm(`Stop ${service}? This may affect running workflows.`, async () => {
+                    const result = await apiCall('/chaos/service', 'POST', { service, action });
+                    showToast(result.status || 'Service control executed', result.success ? 'success' : 'error');
+                    refreshStatus();
+                });
+            } else {
+                const result = await apiCall('/chaos/service', 'POST', { service, action });
+                showToast(result.status || 'Service control executed', result.success ? 'success' : 'error');
+                refreshStatus();
+            }
+        }
+
+        async function workflowAction(action) {
+            if (action === 'terminate-all') {
+                showConfirm('Terminate ALL workflows? This cannot be undone!', async () => {
+                    const result = await apiCall('/chaos/workflow', 'POST', { action });
+                    showToast(result.status || 'Workflow action executed', result.success ? 'success' : 'error');
+                    refreshStatus();
+                });
+            } else {
+                const result = await apiCall('/chaos/workflow', 'POST', { action });
+                showToast(result.status || 'Workflow action executed', result.success ? 'success' : 'error');
+                refreshStatus();
+            }
+        }
+
+        async function injectFault(faultType) {
+            const duration = parseInt(document.getElementById('fault-duration').value);
+            const result = await apiCall('/chaos/inject-fault', 'POST', { fault_type: faultType, duration });
+            showToast(result.status || 'Fault injected', 'warning');
+        }
+
+        async function runScenario(scenario) {
+            if (scenario === 'full-infrastructure-down' || scenario === 'cascading-failure') {
+                showConfirm(`Run "${scenario}" scenario? This will cause major disruptions.`, async () => {
+                    const result = await apiCall('/chaos/scenario', 'POST', { scenario });
+                    showToast(result.status || 'Scenario executed', result.success ? 'success' : 'error');
+                    refreshStatus();
+                });
+            } else {
+                const result = await apiCall('/chaos/scenario', 'POST', { scenario });
+                showToast(result.status || 'Scenario executed', result.success ? 'success' : 'error');
+                refreshStatus();
+            }
+        }
+
+        async function refreshLog() {
+            const log = await apiCall('/chaos/log');
+            const container = document.getElementById('experiment-log');
+            
+            if (log.experiments && log.experiments.length > 0) {
+                container.innerHTML = log.experiments.reverse().map(entry => `
+                    <div class="log-entry">
+                        <span class="log-timestamp">${new Date(entry.timestamp).toLocaleString()}</span>
+                        <span class="log-action">${entry.action}</span>
+                        <span class="log-target">${entry.target}</span>
+                        <span class="log-status ${entry.status === 'failed' ? 'failed' : ''}">${entry.status}</span>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="log-entry"><span class="log-timestamp">No experiments yet...</span></div>';
+            }
+        }
+
+        // Modal handling
+        function showConfirm(message, onConfirm) {
+            if (!chaosModeActive) {
+                showToast('Enable CHAOS MODE for destructive actions!', 'warning');
+                return;
+            }
+            
+            document.getElementById('confirm-message').textContent = message;
+            document.getElementById('confirm-modal').classList.add('active');
+            pendingAction = onConfirm;
+        }
+
+        function confirmAction() {
+            if (pendingAction) {
+                pendingAction();
+                pendingAction = null;
+            }
+            document.getElementById('confirm-modal').classList.remove('active');
+        }
+
+        function cancelAction() {
+            pendingAction = null;
+            document.getElementById('confirm-modal').classList.remove('active');
+        }
+
+        function toggleChaosMode() {
+            chaosModeActive = !chaosModeActive;
+            const btn = document.querySelector('.chaos-mode-btn');
+            if (chaosModeActive) {
+                btn.textContent = '✅ CHAOS MODE ON';
+                btn.style.background = 'var(--danger)';
+                showToast('CHAOS MODE enabled - destructive actions allowed', 'warning');
+            } else {
+                btn.textContent = '⚠️ CHAOS MODE';
+                btn.style.background = '';
+                showToast('CHAOS MODE disabled', 'success');
+            }
+        }
+    </script>
+</body>
+</html>
